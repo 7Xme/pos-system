@@ -485,6 +485,32 @@ class _CartPanel extends StatelessWidget {
     required this.onCheckout,
   });
 
+  /// تأكيد قبل إفراغ السلة كاملة (عملية مهدِمة — لا تتم بالخطأ).
+  Future<void> _confirmClearCart(BuildContext context) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إفراغ السلة؟'),
+        content: Text(
+          'سيتم حذف كل الأصناف (${state.itemCount}) من السلة نهائياً.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('تراجع'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('إفراغ'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true && context.mounted) {
+      context.read<PosBloc>().add(PosClearCart());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = context.select<SettingsCubit, String>(
@@ -565,9 +591,7 @@ class _CartPanel extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: state.cart.isEmpty
                         ? null
-                        : () => context
-                            .read<PosBloc>()
-                            .add(PosClearCart()),
+                        : () => _confirmClearCart(context),
                     child: const Text('مسح'),
                   ),
                 ),

@@ -5,6 +5,7 @@ import 'package:bookstore_pos/features/pos/view/pos_screen.dart';
 import 'package:bookstore_pos/features/settings/bloc/settings_cubit.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -159,6 +160,86 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(find.text('السلة فارغة — أضف صنفاً أولاً'), findsOneWidget);
+    });
+
+    testWidgets('حذف سطر واحد لا يمسح باقي السلة', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => PosBloc(
+                  repo: _FavDemoRepo(),
+                  checkoutRepo: DemoCheckoutRepository(),
+                ),
+              ),
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db),
+              ),
+            ],
+            child: const PosScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // صنفان في السلة: كراسة عبر الاختصار + قلم عبر زر الشبكة الثاني
+      await tester.tap(find.text('كراسة 100 ورقة — 25'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ElevatedButton, 'أضف').at(1));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 33.00'), findsWidgets);
+
+      // حذف أول سطر (أيقونة سلة المهملات) — يجب أن يبقى الثاني
+      await tester.tap(find.byIcon(Icons.delete_outline).first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 8.00'), findsWidgets);
+    });
+
+    testWidgets('زر Delete في لوحة المفاتيح لا يمسح السلة', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => PosBloc(
+                  repo: _FavDemoRepo(),
+                  checkoutRepo: DemoCheckoutRepository(),
+                ),
+              ),
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db),
+              ),
+            ],
+            child: const PosScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('كراسة 100 ورقة — 25'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
     });
 
     testWidgets('Enter في البحث مع نص لا يتمم البيع', (tester) async {
