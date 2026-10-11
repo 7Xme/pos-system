@@ -242,6 +242,57 @@ void main() {
       expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
     });
 
+    testWidgets('زر مسح السلة يطلب تأكيداً قبل الإفراغ', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => PosBloc(
+                  repo: _FavDemoRepo(),
+                  checkoutRepo: DemoCheckoutRepository(),
+                ),
+              ),
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db),
+              ),
+            ],
+            child: const PosScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('كراسة 100 ورقة — 25'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+
+      // الضغط على مسح يعرض تأكيداً ولا يفرغ فوراً
+      await tester.tap(find.widgetWithText(OutlinedButton, 'مسح'));
+      await tester.pumpAndSettle();
+      expect(find.text('إفراغ السلة؟'), findsOneWidget);
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+
+      // التراجع يُبقي السلة
+      await tester.tap(find.text('تراجع'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+
+      // التأكيد يفرغ فعلاً
+      await tester.tap(find.widgetWithText(OutlinedButton, 'مسح'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('إفراغ'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 0.00'), findsWidgets);
+    });
+
     testWidgets('Enter في البحث مع نص لا يتمم البيع', (tester) async {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
