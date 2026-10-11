@@ -1,6 +1,10 @@
 import 'package:bookstore_pos/core/database/app_database.dart';
 import 'package:bookstore_pos/core/tts/arabic_tts_service.dart' show TtsSource;
+import 'package:bookstore_pos/features/inventory/bloc/inventory_bloc.dart';
 import 'package:bookstore_pos/features/settings/bloc/settings_cubit.dart';
+import 'package:bookstore_pos/features/settings/view/settings_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -88,6 +92,40 @@ void main() {
       expect(favs.first.name, 'قلم');
       expect(await db.setFavorite(id, false), true);
       expect(await db.favoriteProducts(), isEmpty);
+    });
+
+    testWidgets('شاشة الإعدادات تعرض مصدر الصوت وزر الاختبار',
+        (tester) async {
+      tester.view.physicalSize = const Size(1440, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db)..load(),
+              ),
+              BlocProvider(
+                create: (_) => InventoryBloc(db: db)
+                  ..add(InventoryStarted()),
+              ),
+            ],
+            child: const SettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('مصدر الصوت'), findsOneWidget);
+      expect(find.text('تلقائي'), findsOneWidget);
+      expect(find.text('أونلاين'), findsOneWidget);
+      expect(find.text('تشغيل اختبار الصوت'), findsOneWidget);
+      expect(find.text('العملة (مثال: درهم)'), findsOneWidget);
     });
   });
 }
