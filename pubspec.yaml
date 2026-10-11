@@ -1,0 +1,61 @@
+name: bookstore_pos
+description: نظام نقطة بيع (POS) لمحل كتب وادوات مدرسية - ديسكتوب + عربي RTL + لمس
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State
+  flutter_bloc: ">=8.1.0 <10.0.0"
+  equatable: ">=2.0.0 <4.0.0"
+
+  # Local DB - Drift (SQLite)
+  drift: ">=2.20.0 <3.0.0"
+  sqlite3_flutter_libs: ">=0.5.0 <1.0.0"
+  sqlite3: ">=2.0.0 <3.0.0"
+  path_provider: ">=2.0.0 <3.0.0"
+  path: ">=1.8.0 <2.0.0"
+
+  # Printing A4 (طابعة عادية)
+  pdf: ">=3.10.0 <4.0.0"
+  printing: ">=5.10.0 <6.0.0"
+  barcode_widget: ">=2.0.0 <3.0.0"
+
+  # TTS عربي عبر SAPI الأصلي (dart:ffi — تهيئة كسولة، لا تعطّل الإقلاع)
+  ffi: ">=2.0.0 <3.0.0"
+
+  # TTS أونلاين بديل (صوت Google العربي) عند غياب أصوات ويندوز
+  http: ">=1.0.0 <2.0.0"
+  audioplayers: ">=6.0.0 <7.0.0"
+
+  # صور + نافذة ديسكتوب + أدوات
+  file_picker: ">=8.0.0 <14.0.0"
+  window_manager: ">=0.4.0 <1.0.0"
+  intl: ">=0.19.0 <1.0.0"
+  uuid: ">=4.0.0 <5.0.0"
+
+  # نسخ احتياطي ZIP (قاعدة البيانات + الصور)
+  archive: ">=3.0.0 <5.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ">=4.0.0 <7.0.0"
+  drift_dev: ">=2.20.0 <3.0.0"
+  build_runner: ">=2.4.0 <3.0.0"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/fonts/
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Variable.ttf
