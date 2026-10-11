@@ -99,6 +99,7 @@ class _PosScreenState extends State<PosScreen> {
             spoken = await ArabicTtsService.instance.speakTotal(
               total,
               currency: settings.currency,
+              source: settings.ttsSource,
             );
           }
           // 2) طباعة A4 — حسب الإعدادات (بسطور الفاتورة المحفوظة)

@@ -1,4 +1,5 @@
 import 'package:bookstore_pos/core/database/app_database.dart';
+import 'package:bookstore_pos/core/tts/arabic_tts_service.dart' show TtsSource;
 import 'package:bookstore_pos/features/settings/bloc/settings_cubit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,6 +14,7 @@ void main() {
       expect(cubit.state.currency, 'درهم');
       expect(cubit.state.phone, '');
       expect(cubit.state.logoPath, isNull);
+      expect(cubit.state.ttsSource, TtsSource.auto);
       expect(cubit.state.soundEnabled, true);
       expect(cubit.state.autoPrint, true);
       await cubit.close();
@@ -30,11 +32,13 @@ void main() {
         logoPath: () => '/tmp/logo.png',
         soundEnabled: false,
         autoPrint: false,
+        ttsSource: TtsSource.online,
       );
       expect(cubit.state.shopName, 'مكتبة الفجر');
       expect(cubit.state.currency, 'دينار');
       expect(cubit.state.phone, '0612345678');
       expect(cubit.state.logoPath, '/tmp/logo.png');
+      expect(cubit.state.ttsSource, TtsSource.online);
       expect(cubit.state.soundEnabled, false);
 
       final cubit2 = SettingsCubit(db: db);
@@ -44,6 +48,7 @@ void main() {
       expect(cubit2.state.currency, 'دينار');
       expect(cubit2.state.phone, '0612345678');
       expect(cubit2.state.logoPath, '/tmp/logo.png');
+      expect(cubit2.state.ttsSource, TtsSource.online);
       expect(cubit2.state.soundEnabled, false);
       expect(cubit2.state.autoPrint, false);
       await cubit.close();

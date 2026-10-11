@@ -413,6 +413,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onChanged: (v) =>
                                   cubit.update(autoPrint: v),
                             ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'مصدر الصوت',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SegmentedButton<TtsSource>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: TtsSource.auto,
+                                  label: Text('تلقائي'),
+                                  icon: Icon(Icons.auto_awesome_outlined),
+                                ),
+                                ButtonSegment(
+                                  value: TtsSource.sapi,
+                                  label: Text('ويندوز'),
+                                  icon: Icon(Icons.computer_outlined),
+                                ),
+                                ButtonSegment(
+                                  value: TtsSource.online,
+                                  label: Text('أونلاين'),
+                                  icon: Icon(Icons.cloud_outlined),
+                                ),
+                              ],
+                              selected: {s.ttsSource},
+                              onSelectionChanged: (v) => cubit.update(
+                                ttsSource: v.first,
+                              ),
+                            ),
+                            const Text(
+                              'تلقائي: صوت ويندوز أولاً ثم الأونلاين عند الحاجة (يحتاج إنترنت).',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ],
                         ),
                       ),
