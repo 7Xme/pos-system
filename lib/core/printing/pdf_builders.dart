@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'pdf_fonts.dart';
+
 /// الخطوة 5 (أ): توليد فاتورة A4 عربية بسيطة — مجموع فقط (حسب اختيارك)
 /// الخط مدمج في التطبيق (assets/fonts) — يعمل دون إنترنت.
-class InvoiceLine {
-  final String name;
+class InvoiceLine {  final String name;
   final int qty;
   final double unitPrice;
   const InvoiceLine({
@@ -20,18 +20,6 @@ class InvoiceLine {
 
 /// تحميل خط Cairo المدمج — نستخدم نفس الملف للعادي والعريض
 /// (الخط المتغير يُرسم بوزنه الافتراضي داخل PDF).
-Future<({pw.Font base, pw.Font bold, pw.ThemeData theme})>
-    _arabicFonts() async {
-  final data = await rootBundle.load('assets/fonts/Cairo-Variable.ttf');
-  final base = pw.Font.ttf(data);
-  final bold = pw.Font.ttf(data);
-  return (
-    base: base,
-    bold: bold,
-    theme: pw.ThemeData.withFont(base: base, bold: bold),
-  );
-}
-
 class PdfInvoiceBuilder {
   static Future<List<int>> build({
     required String shopName,
@@ -45,7 +33,7 @@ class PdfInvoiceBuilder {
     String? phone,
     List<int>? logoBytes,
   }) async {
-    final fonts = await _arabicFonts();
+    final fonts = await loadArabicFonts();
     final theme = fonts.theme;
     final bold = fonts.bold;
 
@@ -172,7 +160,7 @@ class BarcodeLabelBuilder {
     required List<({String name, String barcode, double price})> items,
     String currency = 'درهم',
   }) async {
-    final fonts = await _arabicFonts();
+    final fonts = await loadArabicFonts();
     final theme = fonts.theme;
     final bold = fonts.bold;
     final doc = pw.Document();

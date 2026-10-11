@@ -5,6 +5,7 @@ import '../core/barcode/barcode_scanner_service.dart';
 import '../features/backup/view/backup_screen.dart';
 import '../features/inventory/bloc/inventory_bloc.dart';
 import '../features/pos/bloc/pos_bloc.dart';
+import '../features/purchases/view/purchases_screen.dart';
 import '../features/settings/view/settings_screen.dart';
 import '../features/inventory/view/categories_screen.dart';
 import '../features/inventory/view/products_screen.dart';
@@ -89,6 +90,14 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
               const NavigationRailDestination(
+                icon: Icon(Icons.shopping_cart_outlined, size: 30),
+                selectedIcon: Icon(Icons.shopping_cart, size: 30),
+                label: Text(
+                  'المشتريات',
+                  style: TextStyle(fontSize: 15),
+                ),
+              ),
+              const NavigationRailDestination(
                 icon: Icon(Icons.backup_outlined, size: 30),
                 selectedIcon: Icon(Icons.backup, size: 30),
                 label: Text(
@@ -114,6 +123,7 @@ class _AppShellState extends State<AppShell> {
                 PosScreen(),
                 ProductsScreen(),
                 CategoriesScreen(),
+                PurchasesScreen(),
                 BackupScreen(),
                 SettingsScreen(),
               ],

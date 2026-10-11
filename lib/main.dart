@@ -11,6 +11,7 @@ import 'core/database/seed.dart';
 import 'core/tts/arabic_tts_service.dart';
 import 'features/inventory/bloc/inventory_bloc.dart';
 import 'features/pos/bloc/pos_bloc.dart';
+import 'features/purchases/bloc/purchases_bloc.dart';
 import 'features/settings/bloc/settings_cubit.dart';
 
 Future<void> main() async {
@@ -67,6 +68,9 @@ class BookstorePosApp extends StatelessWidget {
         ),
         BlocProvider(
           create: (_) => InventoryBloc(db: db),
+        ),
+        BlocProvider(
+          create: (_) => PurchasesBloc(db: db),
         ),
         BlocProvider(
           create: (_) => SettingsCubit(db: db)..load(),

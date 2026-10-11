@@ -206,6 +206,99 @@ class AppDatabase extends _$AppDatabase {
       SettingsCompanion.insert(key: key, value: value),
     );
   }
+
+  // ── أوامر الشراء (قوائم المشتريات) ─────────────────────────
+
+  /// إنشاء أمر شراء مع سطوره في Transaction واحدة. يُرجع id الأمر.
+  Future<int> createPurchaseOrder({
+    required String poNumber,
+    required String supplierName,
+    String? supplierPhone,
+    required List<PurchaseOrderItemsCompanion> items,
+  }) {
+    return transaction(() async {
+      var total = 0.0;
+      for (final it in items) {
+        total += it.qtyOrdered.value * it.unitCost.value;
+      }
+      final id = await into(purchaseOrders).insert(
+        PurchaseOrdersCompanion.insert(
+          poNumber: poNumber,
+          supplierName: Value(supplierName),
+          supplierPhone: Value(supplierPhone),
+          totalCost: Value(total),
+        ),
+      );
+      for (final item in items) {
+        await into(purchaseOrderItems).insert(
+          item.copyWith(poId: Value(id)),
+        );
+      }
+      return id;
+    });
+  }
+
+  Future<List<PurchaseOrder>> allPurchaseOrders() {
+    return (select(purchaseOrders)
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
+  Future<List<PurchaseOrderItem>> itemsOfOrder(int poId) {
+    return (select(purchaseOrderItems)
+          ..where((t) => t.poId.equals(poId)))
+        .get();
+  }
+
+  Future<Map<int, int>> purchaseItemCounts() async {
+    final counts = <int, int>{};
+    final rows = await customSelect(
+      'SELECT po_id AS pid, COUNT(*) AS c FROM purchase_order_items '
+      'GROUP BY po_id',
+      readsFrom: {purchaseOrderItems},
+    ).get();
+    for (final r in rows) {
+      counts[r.read<int>('pid')] = r.read<int>('c');
+    }
+    return counts;
+  }
+
+  /// استلام أمر شراء: زيادة المخزون بالكميات المطلوبة وإغلاق الأمر.
+  Future<void> receivePurchaseOrder(int poId) {
+    return transaction(() async {
+      final items = await (select(purchaseOrderItems)
+            ..where((t) => t.poId.equals(poId)))
+          .get();
+      for (final it in items) {
+        final prod = await (select(products)
+              ..where((t) => t.id.equals(it.productId)))
+            .getSingleOrNull();
+        if (prod == null) continue;
+        await (update(products)..where((t) => t.id.equals(prod.id))).write(
+          ProductsCompanion(
+            stockQty: Value(prod.stockQty + it.qtyOrdered),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        await (update(purchaseOrderItems)
+              ..where((t) => t.id.equals(it.id)))
+            .write(
+          PurchaseOrderItemsCompanion(
+            qtyReceived: Value(it.qtyOrdered),
+          ),
+        );
+      }
+      await (update(purchaseOrders)..where((t) => t.id.equals(poId))).write(
+        const PurchaseOrdersCompanion(
+          status: Value('received'),
+        ),
+      );
+    });
+  }
+
+  Future<int> deletePurchaseOrder(int id) {
+    return (delete(purchaseOrders)..where((t) => t.id.equals(id))).go();
+  }
 }
 
 LazyDatabase _openConnection() {

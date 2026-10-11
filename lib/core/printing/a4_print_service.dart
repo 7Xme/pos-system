@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:printing/printing.dart';
 
 import 'pdf_builders.dart';
+import 'pdf_purchase.dart';
 
 /// طباعة A4 عادية (حسب اختيارك — بدون طابعة حرارية)
 class A4PrintService {
@@ -47,6 +48,35 @@ class A4PrintService {
     await Printing.layoutPdf(
       onLayout: (_) async => Uint8List.fromList(bytes),
       name: 'barcode-labels',
+    );
+  }
+
+  /// طباعة قائمة مشتريات / أمر شراء
+  static Future<void> printPurchaseOrder({
+    required String shopName,
+    required String poNumber,
+    required DateTime date,
+    required List<PurchaseLine> lines,
+    String currency = 'درهم',
+    String? phone,
+    List<int>? logoBytes,
+    String supplierName = '',
+    String? supplierPhone,
+  }) async {
+    final bytes = await PdfPurchaseBuilder.build(
+      shopName: shopName,
+      poNumber: poNumber,
+      date: date,
+      lines: lines,
+      currency: currency,
+      phone: phone,
+      logoBytes: logoBytes,
+      supplierName: supplierName,
+      supplierPhone: supplierPhone,
+    );
+    await Printing.layoutPdf(
+      onLayout: (_) async => Uint8List.fromList(bytes),
+      name: poNumber,
     );
   }
 }
