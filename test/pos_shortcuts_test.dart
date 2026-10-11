@@ -124,5 +124,87 @@ void main() {
       final all = await repo.search('');
       expect(all.firstWhere((p) => p.barcode == '700001').imagePath, fakePath);
     });
+
+    testWidgets('Enter في حقل باركود فارغ يحاول إتمام البيع', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => PosBloc(
+                  repo: _FavDemoRepo(),
+                  checkoutRepo: DemoCheckoutRepository(),
+                ),
+              ),
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db),
+              ),
+            ],
+            child: const PosScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // السلة فارغة + Enter = تنبيه (لا بيع صامت ولا تعطل)
+      await tester.tap(find.byKey(const Key('barcodeField')));
+      await tester.pumpAndSettle();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('السلة فارغة — أضف صنفاً أولاً'), findsOneWidget);
+    });
+
+    testWidgets('Enter في البحث مع نص لا يتمم البيع', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar'),
+          home: MultiBlocProvider(
+            providers: [
+              BlocProvider(
+                create: (_) => PosBloc(
+                  repo: _FavDemoRepo(),
+                  checkoutRepo: DemoCheckoutRepository(),
+                ),
+              ),
+              BlocProvider(
+                create: (_) => SettingsCubit(db: db),
+              ),
+            ],
+            child: const PosScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // صنف في السلة أولاً
+      await tester.tap(find.text('كراسة 100 ورقة — 25'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+
+      // كتابة بحث + Enter: تبقى السلة كما هي ولا بيع
+      final search = find.byType(TextField).first;
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      await tester.enterText(search, 'كرا');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('الإجمالي: 25.00'), findsWidgets);
+      expect(find.text('السلة فارغة — أضف صنفاً أولاً'), findsNothing);
+      // تصريف أي مؤقت شارد (debounce البحث) قبل التفكيك
+      await tester.pump(const Duration(seconds: 2));
+    });
   });
 }

@@ -45,6 +45,11 @@ class _PosScreenState extends State<PosScreen> {
     // التقاط الماسح عاماً من أي مكان (يعمل دون نقر أي حقل)
     BarcodeScannerService.captureEnabled = true;
     HardwareKeyboard.instance.addHandler(BarcodeScannerService.handleKey);
+    // زر Enter العام = إتمام البيع (ما لم يكن مسحاً أو كتابة نص)
+    BarcodeScannerService.onCheckoutHotkey = () {
+      if (!mounted) return;
+      _checkout(context.read<PosBloc>().state);
+    };
     _barcodeSub = BarcodeScannerService.stream.listen((code) {
       if (!mounted) return;
       context.read<PosBloc>().add(PosBarcodeScanned(code));
@@ -61,6 +66,7 @@ class _PosScreenState extends State<PosScreen> {
     _barcodeNode.dispose();
     HardwareKeyboard.instance
         .removeHandler(BarcodeScannerService.handleKey);
+    BarcodeScannerService.onCheckoutHotkey = null;
     _barcodeSub?.cancel();
     _debounce?.cancel();
     super.dispose();
@@ -206,6 +212,14 @@ class _PosScreenState extends State<PosScreen> {
                             focusNode: _barcodeNode,
                             autofocus: true,
                             onSubmitted: (v) {
+                              if (v.trim().isEmpty) {
+                                // Enter على حقل فارغ = إتمام البيع
+                                _checkout(
+                                  context.read<PosBloc>().state,
+                                );
+                                _refocusBarcode();
+                                return;
+                              }
                               context
                                   .read<PosBloc>()
                                   .add(PosBarcodeScanned(v));

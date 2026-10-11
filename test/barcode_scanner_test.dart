@@ -104,5 +104,44 @@ void main() {
       expect(codes, isEmpty);
       await sub.cancel();
     });
+
+    test('Enter وحيد (ليس مسحاً) يستدعي إتمام البيع ويُلتهم', () async {
+      var calls = 0;
+      BarcodeScannerService.onCheckoutHotkey = () => calls++;
+      addTearDown(
+        () => BarcodeScannerService.onCheckoutHotkey = null,
+      );
+
+      final codes = <String>[];
+      final sub = BarcodeScannerService.stream.listen(codes.add);
+
+      expect(BarcodeScannerService.handleKey(_enter()), true);
+      await Future.delayed(Duration.zero);
+
+      expect(calls, 1);
+      expect(codes, isEmpty); // ليس مسحاً — لا صنف مضاف
+      await sub.cancel();
+    });
+
+    test('المسح السريع لا يستدعي إتمام البيع', () async {
+      var calls = 0;
+      BarcodeScannerService.onCheckoutHotkey = () => calls++;
+      addTearDown(
+        () => BarcodeScannerService.onCheckoutHotkey = null,
+      );
+
+      final codes = <String>[];
+      final sub = BarcodeScannerService.stream.listen(codes.add);
+
+      for (final ch in '100002'.split('')) {
+        BarcodeScannerService.handleKey(_digit(ch));
+      }
+      BarcodeScannerService.handleKey(_enter());
+      await Future.delayed(Duration.zero);
+
+      expect(codes, ['100002']);
+      expect(calls, 0);
+      await sub.cancel();
+    });
   });
 }

@@ -30,6 +30,10 @@ class BarcodeScannerService {
   /// في IndexedStack) حتى لا يلتهم الماسح كتابة شاشات المخزون.
   static bool captureEnabled = true;
 
+  /// يُستدعى عند ضغط Enter عام (ليس مسحاً ولا إدخال نص) لإتمام البيع.
+  /// تضبطه شاشة البيع وتُصفّره عند التخلص منها.
+  static void Function()? onCheckoutHotkey;
+
   /// أقصى فاصل بين حرفين ليُعتبرا من نفس المسح (الماسح أسرع بكثير).
   static const maxGap = Duration(milliseconds: 45);
 
@@ -110,7 +114,24 @@ class BarcodeScannerService {
       _controller.add(code);
       return true; // نلتهم Enter حتى لا يضغط زراً مركزاً بالخطأ.
     }
+    // ليس مسحاً: Enter وحيد = إتمام البيع — بشرط ألا يكون المستخدم
+    // يكتب نصاً في حقل (عندها نترك الحقل يتصرف).
+    if (onCheckoutHotkey != null && _focusedText().isEmpty) {
+      onCheckoutHotkey!();
+      return true;
+    }
     return false;
+  }
+
+  /// نص حقل الإدخال المركّز حالياً، أو '' إن لم يكن هناك حقل نصي.
+  static String _focusedText() {
+    try {
+      final state = FocusManager.instance.primaryFocus?.context
+          ?.findAncestorStateOfType<EditableTextState>();
+      return state?.textEditingValue.text ?? '';
+    } catch (_) {
+      return '';
+    }
   }
 
   /// يمسح بقايا أحرف المسح (التي مرت قبل التيقن) من الحقل المركّز حالياً.
