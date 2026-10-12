@@ -6,11 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/barcode/barcode_scanner_service.dart';
+import '../../../core/database/app_database.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
 import '../../../core/tts/arabic_tts_service.dart';
+import '../../inventory/bloc/inventory_bloc.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/pos_bloc.dart';
+import 'quick_add_product_dialog.dart';
 
 /// الخطوة 3: واجهة نقطة البيع الرئيسية
 /// - بحث + مسح باركود (HID كلوحة مفاتيح + حقل يدوي)
@@ -31,6 +34,9 @@ class _PosScreenState extends State<PosScreen> {
   StreamSubscription<String>? _barcodeSub;
   Timer? _debounce;
 
+  /// يمنع فتح نموذج الإضافة السريعة أكثر من مرة لنفس الباركود المجهول.
+  bool _addingUnknown = false;
+
   /// يعيد الفوكس لحقل الباركود ليبقى الماسح/الكتابة جاهزين دائماً.
   void _refocusBarcode() {
     if (!mounted) return;
@@ -45,7 +51,7 @@ class _PosScreenState extends State<PosScreen> {
     // التقاط الماسح عاماً من أي مكان (يعمل دون نقر أي حقل)
     BarcodeScannerService.captureEnabled = true;
     HardwareKeyboard.instance.addHandler(BarcodeScannerService.handleKey);
-    // زر Enter العام = إتمام البيع (ما لم يكن مسحاً أو كتابة نص)
+    // زر P العام = إتمام البيع (ما لم يكن المستخدم يكتب نصاً في حقل)
     BarcodeScannerService.onCheckoutHotkey = () {
       if (!mounted) return;
       _checkout(context.read<PosBloc>().state);
@@ -84,12 +90,55 @@ class _PosScreenState extends State<PosScreen> {
     context.read<PosBloc>().add(PosCheckout(paid));
   }
 
+  /// باركود غير موجود: يفتح نموذج الإضافة السريعة مع تعطيل الماسح مؤقتاً
+  /// (يمنع اختطاف كتابة النموذج)، ثم يحدّث شبكة البيع وسجل المخزون.
+  Future<void> _onUnknownBarcode(String code) async {
+    _addingUnknown = true;
+    final bloc = context.read<PosBloc>();
+    final db = context.read<AppDatabase>();
+    // صفّر الطلب أولاً حتى لا يُعاد فتح النموذج مع كل إعادة بناء.
+    bloc.add(PosMissingBarcodeHandled());
+    // عطّل الالتقاط العام أثناء الكتابة في النموذج.
+    BarcodeScannerService.captureEnabled = false;
+    String? addedName;
+    try {
+      addedName = await showQuickAddProductDialog(
+        context,
+        barcode: code,
+        db: db,
+      );
+    } finally {
+      if (mounted) {
+        BarcodeScannerService.captureEnabled = true;
+        BarcodeScannerService.reset();
+      }
+      _addingUnknown = false;
+    }
+    if (!mounted || addedName == null) {
+      _refocusBarcode();
+      return;
+    }
+    // حدّث شبكة البيع وسجل المخزون ليظهر الصنف الجديد.
+    bloc.add(PosQueryChanged(bloc.state.query));
+    context.read<InventoryBloc>().add(InventoryStarted());
+    _refocusBarcode();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تمت إضافة «$addedName» — صار متاحاً للبيع')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<PosBloc, PosState>(
       listenWhen: (a, b) =>
-          a.status != b.status || a.lastInvoiceNumber != b.lastInvoiceNumber,
+          a.status != b.status ||
+          a.lastInvoiceNumber != b.lastInvoiceNumber ||
+          a.missingBarcode != b.missingBarcode,
       listener: (context, state) async {
+        if (state.missingBarcode != null && !_addingUnknown) {
+          await _onUnknownBarcode(state.missingBarcode!);
+          return;
+        }
         if (state.status == PosStatus.failure && state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(state.error!)),
@@ -125,6 +174,8 @@ class _PosScreenState extends State<PosScreen> {
               shopName: settings.shopName,
               invoiceNumber: invNo,
               date: DateTime.now(),
+              pageFormat:
+                  A4PrintService.paperFormatOf(settings.paperSize),
               lines: [
                 for (final l in state.lastLines)
                   InvoiceLine(
@@ -134,6 +185,13 @@ class _PosScreenState extends State<PosScreen> {
                   ),
               ],
               amountPaid: state.lastAmountPaid,
+              discount:
+                  state.lastSubtotal - (state.lastTotal ?? 0),
+              discountLabel: state.lastDiscount > 0
+                  ? (state.lastDiscountType == 'percent'
+                      ? '${state.lastDiscount.toStringAsFixed(0)}%'
+                      : null)
+                  : null,
               cashier: settings.cashier,
               currency: settings.currency,
               phone: phone,
@@ -213,10 +271,7 @@ class _PosScreenState extends State<PosScreen> {
                             autofocus: true,
                             onSubmitted: (v) {
                               if (v.trim().isEmpty) {
-                                // Enter على حقل فارغ = إتمام البيع
-                                _checkout(
-                                  context.read<PosBloc>().state,
-                                );
+                                // Enter على حقل فارغ: لا شيء (إتمام البيع الآن بزر P)
                                 _refocusBarcode();
                                 return;
                               }
@@ -550,6 +605,9 @@ class _CartPanel extends StatelessWidget {
                   ),
           ),
           const Divider(),
+          // الخصم (مبلغ أو نسبة) — يُصفَّر مع إتمام البيع
+          _DiscountRow(state: state),
+          const SizedBox(height: 8),
           // الإجمالي بخط ضخم
           Container(
             padding: const EdgeInsets.all(12),
@@ -558,13 +616,33 @@ class _CartPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFF2A007)),
             ),
-            child: Text(
-              'الإجمالي: ${state.total.toStringAsFixed(2)} $currency',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                if (state.discountAmount > 0) ...[
+                  Text(
+                    'المجموع الفرعي: '
+                    '${state.subtotal.toStringAsFixed(2)} $currency',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  Text(
+                    'الخصم: '
+                    '-${state.discountAmount.toStringAsFixed(2)} $currency',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFFC62828),
+                    ),
+                  ),
+                  const Divider(height: 8),
+                ],
+                Text(
+                  'الإجمالي: ${state.total.toStringAsFixed(2)} $currency',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -606,7 +684,7 @@ class _CartPanel extends StatelessWidget {
                         state.cart.isEmpty ? null : onCheckout,
                     icon: const Icon(Icons.check_circle, size: 28),
                     label: const Text(
-                      'إتمام البيع + نطق وطباعة',
+                      'إتمام البيع + نطق وطباعة (P)',
                       style: TextStyle(fontSize: 17),
                     ),
                   ),
@@ -688,6 +766,96 @@ class _CartLineTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// صف إدخال الخصم: قيمة رقمية + تبديل النوع (مبلغ / نسبة مئوية).
+class _DiscountRow extends StatefulWidget {
+  final PosState state;
+  const _DiscountRow({required this.state});
+
+  @override
+  State<_DiscountRow> createState() => _DiscountRowState();
+}
+
+class _DiscountRowState extends State<_DiscountRow> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(
+      text: widget.state.discountValue == 0
+          ? ''
+          : _fmt(widget.state.discountValue),
+    );
+  }
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  void didUpdateWidget(covariant _DiscountRow old) {
+    super.didUpdateWidget(old);
+    // مزامنة الحقل عند إتمام البيع (تصفير الخصم) أو تغييره خارجياً.
+    if (widget.state.discountValue != old.state.discountValue) {
+      final next = widget.state.discountValue == 0
+          ? ''
+          : _fmt(widget.state.discountValue);
+      if (_ctrl.text != next) _ctrl.text = next;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPercent = widget.state.discountType == 'percent';
+    final enabled = widget.state.cart.isNotEmpty;
+    void push(String type) {
+      final v = double.tryParse(_ctrl.text.trim().replaceAll(',', '.')) ?? 0;
+      context.read<PosBloc>().add(PosDiscountChanged(v, type));
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 48,
+            child: TextField(
+              controller: _ctrl,
+              enabled: enabled,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onChanged: (_) => push(isPercent ? 'percent' : 'amount'),
+              style: const TextStyle(fontSize: 16),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: isPercent ? 'خصم %' : 'خصم (مبلغ)',
+                prefixIcon: const Icon(Icons.local_offer_outlined),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'amount', label: Text('درهم')),
+            ButtonSegment(value: 'percent', label: Text('%')),
+          ],
+          selected: {widget.state.discountType},
+          showSelectedIcon: false,
+          onSelectionChanged: enabled
+              ? (s) => push(s.first)
+              : null,
+        ),
+      ],
     );
   }
 }

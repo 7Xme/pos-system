@@ -6,6 +6,8 @@ import '../features/backup/view/backup_screen.dart';
 import '../features/inventory/bloc/inventory_bloc.dart';
 import '../features/pos/bloc/pos_bloc.dart';
 import '../features/purchases/view/purchases_screen.dart';
+import '../features/sales/bloc/sales_bloc.dart';
+import '../features/sales/view/sales_screen.dart';
 import '../features/settings/view/settings_screen.dart';
 import '../features/inventory/view/categories_screen.dart';
 import '../features/inventory/view/products_screen.dart';
@@ -53,6 +55,10 @@ class _AppShellState extends State<AppShell> {
               if (i == 0) {
                 context.read<PosBloc>().add(PosFavoritesRefreshed());
               }
+              // تحديث سجل المبيعات عند فتحه (قد تُحفظ فواتير جديدة)
+              if (i == 4) {
+                context.read<SalesBloc>().add(SalesRefreshed());
+              }
             },
             labelType: NavigationRailLabelType.all,
             minWidth: 96,
@@ -98,6 +104,14 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
               const NavigationRailDestination(
+                icon: Icon(Icons.receipt_long_outlined, size: 30),
+                selectedIcon: Icon(Icons.receipt_long, size: 30),
+                label: Text(
+                  'المبيعات',
+                  style: TextStyle(fontSize: 15),
+                ),
+              ),
+              const NavigationRailDestination(
                 icon: Icon(Icons.backup_outlined, size: 30),
                 selectedIcon: Icon(Icons.backup, size: 30),
                 label: Text(
@@ -124,6 +138,7 @@ class _AppShellState extends State<AppShell> {
                 ProductsScreen(),
                 CategoriesScreen(),
                 PurchasesScreen(),
+                SalesScreen(),
                 BackupScreen(),
                 SettingsScreen(),
               ],

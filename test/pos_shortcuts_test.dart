@@ -126,7 +126,7 @@ void main() {
       expect(all.firstWhere((p) => p.barcode == '700001').imagePath, fakePath);
     });
 
-    testWidgets('Enter في حقل باركود فارغ يحاول إتمام البيع', (tester) async {
+    testWidgets('زر P في حقل باركود فارغ يحاول إتمام البيع', (tester) async {
       tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -154,10 +154,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // السلة فارغة + Enter = تنبيه (لا بيع صامت ولا تعطل)
+      // السلة فارغة + P = تنبيه (لا بيع صامت ولا تعطل)
       await tester.tap(find.byKey(const Key('barcodeField')));
       await tester.pumpAndSettle();
-      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
       await tester.pumpAndSettle();
       expect(find.text('السلة فارغة — أضف صنفاً أولاً'), findsOneWidget);
     });

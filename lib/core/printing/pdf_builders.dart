@@ -5,7 +5,8 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'pdf_fonts.dart';
 
-/// الخطوة 5 (أ): توليد فاتورة A4 عربية بسيطة — مجموع فقط (حسب اختيارك)
+/// الخطوة 5 (أ): توليد فاتورة عربية بسيطة — مجموع فقط (حسب اختيارك)
+/// حجم الورق A5 افتراضياً (قابل للتبديل إلى A4 من الإعدادات).
 /// الخط مدمج في التطبيق (assets/fonts) — يعمل دون إنترنت.
 class InvoiceLine {  final String name;
   final int qty;
@@ -27,126 +28,181 @@ class PdfInvoiceBuilder {
     required DateTime date,
     required List<InvoiceLine> lines,
     required double amountPaid,
+    double discount = 0,
+    String? discountLabel,
     String? cashier,
     String? notes,
     String currency = 'درهم',
     String? phone,
     List<int>? logoBytes,
+    PdfPageFormat pageFormat = PdfPageFormat.a5,
   }) async {
     final fonts = await loadArabicFonts();
     final theme = fonts.theme;
     final bold = fonts.bold;
 
-    final total = lines.fold<double>(0, (s, e) => s + e.total);
-    final change = amountPaid - total;
+    final subtotal = lines.fold<double>(0, (s, e) => s + e.total);
+    final total = subtotal - (discount < 0 ? 0 : discount);
+    final change = amountPaid - (total < 0 ? 0 : total);
 
     final doc = pw.Document();
 
-    doc.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        theme: theme,
-        // حزمة pdf ترسم LTR؛ نحاكي RTL بمحاذاة يمين + ترتيب أعمدة معكوس
-        build: (ctx) => pw.Directionality(
+    // MultiPage: الجدول يمتد على عدة صفحات عند كثرة الأصناف،
+    // والخطوط صغيرة ومضغوطة لاستيعاب أكبر عدد في نفس الورقة.
+    // حزمة pdf ترسم LTR؛ نحاكي RTL بمحاذاة يمين + ترتيب أعمدة معكوس.
+    pw.Widget rtl(pw.Widget child) => pw.Directionality(
           textDirection: pw.TextDirection.rtl,
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              if (logoBytes != null)
-                pw.Center(
-                  child: pw.Image(
-                    pw.MemoryImage(Uint8List.fromList(logoBytes)),
-                    width: 90,
-                    height: 90,
+          child: child,
+        );
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(20),
+        theme: theme,
+        footer: (ctx) => rtl(
+          pw.Center(
+            child: pw.Text(
+              'شكراً لتسوقكم معنا — نتمنى لكم عاماً دراسياً موفقاً',
+              style: const pw.TextStyle(fontSize: 8),
+            ),
+          ),
+        ),
+        build: (ctx) => [
+          rtl(
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                if (logoBytes != null)
+                  pw.Center(
+                    child: pw.Image(
+                      pw.MemoryImage(Uint8List.fromList(logoBytes)),
+                      width: 54,
+                      height: 54,
+                    ),
                   ),
-                ),
-              if (logoBytes != null) pw.SizedBox(height: 4),
-              pw.Center(
-                child: pw.Text(
-                  shopName,
-                  style: pw.TextStyle(font: bold, fontSize: 22),
-                ),
-              ),
-              if (phone != null && phone.isNotEmpty)
+                if (logoBytes != null) pw.SizedBox(height: 2),
                 pw.Center(
                   child: pw.Text(
-                    'هاتف: $phone',
-                    style: const pw.TextStyle(fontSize: 12),
+                    shopName,
+                    style: pw.TextStyle(font: bold, fontSize: 15),
                   ),
                 ),
-              pw.SizedBox(height: 4),
-              pw.Center(
-                child: pw.Text(
-                  'مكتبة وأدوات مدرسية — فاتورة بيع',
-                  style: const pw.TextStyle(fontSize: 13),
-                ),
-              ),
-              pw.Divider(),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('رقم الفاتورة: $invoiceNumber'),
-                  pw.Text(
-                    'التاريخ: ${date.year}/${date.month}/${date.day}'
-                    ' — ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+                if (phone != null && phone.isNotEmpty)
+                  pw.Center(
+                    child: pw.Text(
+                      'هاتف: $phone',
+                      style: const pw.TextStyle(fontSize: 8.5),
+                    ),
                   ),
-                ],
-              ),
-              if (cashier != null) pw.Text('الكاشير: $cashier'),
-              pw.SizedBox(height: 12),
-              pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(font: bold, fontSize: 12),
-                cellStyle: const pw.TextStyle(fontSize: 11),
-                headerAlignment: pw.Alignment.center,
-                cellAlignment: pw.Alignment.center,
-                headers: const ['الإجمالي', 'السعر', 'الكمية', 'الصنف'],
-                data: [
-                  for (final l in lines)
-                    [
-                      l.total.toStringAsFixed(2),
-                      l.unitPrice.toStringAsFixed(2),
-                      l.qty.toString(),
-                      l.name,
-                    ],
-                ],
-              ),
-              pw.SizedBox(height: 16),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(),
-                  borderRadius: const pw.BorderRadius.all(
-                    pw.Radius.circular(8),
+                pw.SizedBox(height: 2),
+                pw.Center(
+                  child: pw.Text(
+                    'مكتبة وأدوات مدرسية — فاتورة بيع',
+                    style: const pw.TextStyle(fontSize: 10),
                   ),
                 ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                pw.Divider(thickness: 0.5, height: 6),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      'الإجمالي: ${total.toStringAsFixed(2)} $currency',
-                      style: pw.TextStyle(font: bold, fontSize: 16),
+                      'رقم الفاتورة: $invoiceNumber',
+                      style: const pw.TextStyle(fontSize: 8.5),
                     ),
                     pw.Text(
-                      'المدفوع: ${amountPaid.toStringAsFixed(2)}'
-                      ' — الباقي: ${change.toStringAsFixed(2)}',
+                      'التاريخ: ${date.year}/${date.month}/${date.day}'
+                      ' — ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+                      style: const pw.TextStyle(fontSize: 8.5),
                     ),
                   ],
                 ),
-              ),
-              if (notes != null && notes.isNotEmpty) ...[
-                pw.SizedBox(height: 8),
-                pw.Text('ملاحظات: $notes'),
+                if (cashier != null)
+                  pw.Text(
+                    'الكاشير: $cashier',
+                    style: const pw.TextStyle(fontSize: 8.5),
+                  ),
               ],
-              pw.Spacer(),
-              pw.Center(
-                child: pw.Text(
-                  'شكراً لتسوقكم معنا — نتمنى لكم عاماً دراسياً موفقاً',
-                  style: const pw.TextStyle(fontSize: 11),
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          rtl(
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(font: bold, fontSize: 9),
+              cellStyle: const pw.TextStyle(fontSize: 8.5),
+              headerAlignment: pw.Alignment.center,
+              cellAlignment: pw.Alignment.center,
+              cellPadding: const pw.EdgeInsets.symmetric(
+                vertical: 2.5,
+                horizontal: 4,
+              ),
+              columnWidths: {
+                // الصنف أوسع عمود (معكوس RTL: آخر عمود يظهر أولاً يميناً)
+                0: const pw.FlexColumnWidth(1.2),
+                1: const pw.FlexColumnWidth(1.6),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(2.6),
+              },
+              headers: const ['الإجمالي', 'السعر', 'الكمية', 'الصنف'],
+              data: [
+                for (final l in lines)
+                  [
+                    l.total.toStringAsFixed(2),
+                    l.unitPrice.toStringAsFixed(2),
+                    l.qty.toString(),
+                    l.name,
+                  ],
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          rtl(
+            pw.Container(
+              padding: const pw.EdgeInsets.all(6),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(),
+                borderRadius: const pw.BorderRadius.all(
+                  pw.Radius.circular(6),
                 ),
               ),
-            ],
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  if (discount > 0) ...[
+                    pw.Text(
+                      'المجموع الفرعي: ${subtotal.toStringAsFixed(2)} $currency',
+                      style: const pw.TextStyle(fontSize: 8.5),
+                    ),
+                    pw.Text(
+                      'الخصم${discountLabel == null ? '' : ' ($discountLabel)'}: '
+                      '-${discount.toStringAsFixed(2)} $currency',
+                      style: const pw.TextStyle(fontSize: 8.5),
+                    ),
+                    pw.SizedBox(height: 2),
+                  ],
+                  pw.Text(
+                    'الإجمالي: ${(total < 0 ? 0 : total).toStringAsFixed(2)} $currency',
+                    style: pw.TextStyle(font: bold, fontSize: 12.5),
+                  ),
+                  pw.Text(
+                    'المدفوع: ${amountPaid.toStringAsFixed(2)}'
+                    ' — الباقي: ${change.toStringAsFixed(2)}',
+                    style: const pw.TextStyle(fontSize: 8.5),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
+          if (notes != null && notes.isNotEmpty) ...[
+            pw.SizedBox(height: 4),
+            rtl(
+              pw.Text(
+                'ملاحظات: $notes',
+                style: const pw.TextStyle(fontSize: 8.5),
+              ),
+            ),
+          ],
+        ],
       ),
     );
 

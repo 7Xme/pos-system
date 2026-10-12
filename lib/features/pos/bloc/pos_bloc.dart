@@ -47,8 +47,10 @@ abstract class PosCatalogRepository {
 abstract class PosCheckoutRepository {
   Future<({String invoiceNumber, double total})> checkout(
     List<CartLine> cart,
-    double amountPaid,
-  );
+    double amountPaid, {
+    double discount = 0,
+    String discountType = 'amount',
+  });
 }
 
 /// نسخة تجريبية للاختبارات (بدون قاعدة بيانات)
@@ -58,14 +60,28 @@ class DemoCheckoutRepository implements PosCheckoutRepository {
   @override
   Future<({String invoiceNumber, double total})> checkout(
     List<CartLine> cart,
-    double amountPaid,
-  ) async {
-    final total = cart.fold<double>(0, (s, e) => s + e.total);
+    double amountPaid, {
+    double discount = 0,
+    String discountType = 'amount',
+  }) async {
+    final subtotal = cart.fold<double>(0, (s, e) => s + e.total);
+    final total = applyDiscount(subtotal, discount, discountType);
     final now = DateTime.now();
     final invNo =
         'INV-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${(_seq++).toString().padLeft(4, '0')}';
     return (invoiceNumber: invNo, total: total);
   }
+}
+
+/// حساب الصافي بعد الخصم (مشترك بين البلوك والمستودعات).
+/// discountType: 'amount' مبلغ ثابت أو 'percent' نسبة مئوية.
+double applyDiscount(double subtotal, double value, String type) {
+  if (subtotal <= 0 || value <= 0) return subtotal < 0 ? 0 : subtotal;
+  final d = type == 'percent'
+      ? subtotal * value.clamp(0, 100) / 100
+      : value.clamp(0, subtotal);
+  final net = subtotal - d;
+  return net < 0 ? 0 : net;
 }
 
 /// بيانات تجريبية حتى تُولّد قاعدة Drift (build_runner)
@@ -156,6 +172,15 @@ class PosRemoveLine extends PosEvent {
 
 class PosClearCart extends PosEvent {}
 
+/// تغيير الخصم (قيمة + نوع amount|percent). يُصفَّر تلقائياً مع السلة.
+class PosDiscountChanged extends PosEvent {
+  final double value;
+  final String type;
+  const PosDiscountChanged(this.value, this.type);
+  @override
+  List<Object?> get props => [value, type];
+}
+
 class PosCheckout extends PosEvent {
   final double amountPaid;
   const PosCheckout(this.amountPaid);
@@ -164,6 +189,9 @@ class PosCheckout extends PosEvent {
 }
 
 class PosCheckoutHandled extends PosEvent {}
+
+/// عُرض نموذج الإضافة السريعة للباركود المجهول — يُصفّى الطلب.
+class PosMissingBarcodeHandled extends PosEvent {}
 
 class PosFavoritesRefreshed extends PosEvent {}
 
@@ -180,7 +208,15 @@ class PosState extends Equatable {
   final double? lastTotal;
   final List<CartLine> lastLines;
   final double lastAmountPaid;
+  final double lastDiscount;
+  final String lastDiscountType;
+  final double lastSubtotal;
   final List<ProductDto> favorites; // أزرار الاختصار المثبتة
+  final double discountValue;
+  final String discountType; // amount | percent
+
+  /// باركود مُسح ولم يُعثر على صنفه — تفتح الشاشة نموذج الإضافة السريعة.
+  final String? missingBarcode;
 
   const PosState({
     this.status = PosStatus.initial,
@@ -192,10 +228,31 @@ class PosState extends Equatable {
     this.lastTotal,
     this.lastLines = const [],
     this.lastAmountPaid = 0,
+    this.lastDiscount = 0,
+    this.lastDiscountType = 'amount',
+    this.lastSubtotal = 0,
     this.favorites = const [],
+    this.discountValue = 0,
+    this.discountType = 'amount',
+    this.missingBarcode,
   });
 
-  double get total => cart.fold(0, (s, e) => s + e.total);
+  /// المجموع الفرعي قبل الخصم.
+  double get subtotal => cart.fold(0, (s, e) => s + e.total);
+
+  /// قيمة الخصم بالدرهم (محسوبة من النوع).
+  double get discountAmount => subtotal - applyDiscount(
+        subtotal,
+        discountValue,
+        discountType,
+      );
+
+  /// الصافي المستحق بعد الخصم.
+  double get total => applyDiscount(
+        subtotal,
+        discountValue,
+        discountType,
+      );
   int get itemCount => cart.fold(0, (s, e) => s + e.qty);
 
   PosState copyWith({
@@ -208,7 +265,13 @@ class PosState extends Equatable {
     double? lastTotal,
     List<CartLine>? lastLines,
     double? lastAmountPaid,
+    double? lastDiscount,
+    String? lastDiscountType,
+    double? lastSubtotal,
     List<ProductDto>? favorites,
+    double? discountValue,
+    String? discountType,
+    String? missingBarcode,
   }) {
     return PosState(
       status: status ?? this.status,
@@ -220,7 +283,13 @@ class PosState extends Equatable {
       lastTotal: lastTotal ?? this.lastTotal,
       lastLines: lastLines ?? this.lastLines,
       lastAmountPaid: lastAmountPaid ?? this.lastAmountPaid,
+      lastDiscount: lastDiscount ?? this.lastDiscount,
+      lastDiscountType: lastDiscountType ?? this.lastDiscountType,
+      lastSubtotal: lastSubtotal ?? this.lastSubtotal,
       favorites: favorites ?? this.favorites,
+      discountValue: discountValue ?? this.discountValue,
+      discountType: discountType ?? this.discountType,
+      missingBarcode: missingBarcode,
     );
   }
 
@@ -235,7 +304,13 @@ class PosState extends Equatable {
         lastTotal,
         lastLines,
         lastAmountPaid,
+        lastDiscount,
+        lastDiscountType,
+        lastSubtotal,
         favorites,
+        discountValue,
+        discountType,
+        missingBarcode,
       ];
 }
 
@@ -253,11 +328,17 @@ class PosBloc extends Bloc<PosEvent, PosState> {
     on<PosIncrement>(_onInc);
     on<PosDecrement>(_onDec);
     on<PosRemoveLine>(_onRemove);
-    on<PosClearCart>((e, emit) => emit(state.copyWith(cart: [])));
+    on<PosClearCart>(
+      (e, emit) => emit(state.copyWith(cart: [], discountValue: 0)),
+    );
+    on<PosDiscountChanged>(_onDiscount);
     on<PosCheckout>(_onCheckout);
     on<PosFavoritesRefreshed>(_onFavorites);
     on<PosCheckoutHandled>(
       (e, emit) => emit(state.copyWith(status: PosStatus.ready)),
+    );
+    on<PosMissingBarcodeHandled>(
+      (e, emit) => emit(state.copyWith(missingBarcode: null)),
     );
   }
 
@@ -294,11 +375,12 @@ class PosBloc extends Bloc<PosEvent, PosState> {
   ) async {
     final product = await repo.findByBarcode(e.code);
     if (product == null) {
+      // صنف مجهول — تفتح الشاشة نموذج الإضافة السريعة (لا خطأ أحمر).
       emit(state.copyWith(
-        status: PosStatus.failure,
-        error: 'لم يتم العثور على صنف بالباركود: ${e.code}',
+        status: PosStatus.ready,
+        error: null,
+        missingBarcode: e.code,
       ));
-      emit(state.copyWith(status: PosStatus.ready, error: null));
       return;
     }
     add(PosAddProduct(product));
@@ -307,6 +389,16 @@ class PosBloc extends Bloc<PosEvent, PosState> {
   void _onAdd(PosAddProduct e, Emitter<PosState> emit) {
     final cart = List<CartLine>.from(state.cart);
     final i = cart.indexWhere((l) => l.product.id == e.product.id);
+    final current = i >= 0 ? cart[i].qty : 0;
+    // منع تجاوز المخزون المتاح
+    if (current + 1 > e.product.stockQty) {
+      emit(state.copyWith(
+        status: PosStatus.failure,
+        error: 'المتاح من «${e.product.name}»: ${e.product.stockQty} فقط',
+      ));
+      emit(state.copyWith(status: PosStatus.ready, error: null));
+      return;
+    }
     if (i >= 0) {
       cart[i] = cart[i].copyWith(qty: cart[i].qty + 1);
     } else {
@@ -316,6 +408,18 @@ class PosBloc extends Bloc<PosEvent, PosState> {
   }
 
   void _onInc(PosIncrement e, Emitter<PosState> emit) {
+    final line = state.cart
+        .where((l) => l.product.id == e.productId)
+        .firstOrNull;
+    // منع تجاوز المخزون المتاح
+    if (line != null && line.qty + 1 > line.product.stockQty) {
+      emit(state.copyWith(
+        status: PosStatus.failure,
+        error: 'المتاح من «${line.product.name}»: ${line.product.stockQty} فقط',
+      ));
+      emit(state.copyWith(status: PosStatus.ready, error: null));
+      return;
+    }
     final cart = state.cart
         .map((l) => l.product.id == e.productId
             ? l.copyWith(qty: l.qty + 1)
@@ -343,6 +447,14 @@ class PosBloc extends Bloc<PosEvent, PosState> {
     ));
   }
 
+  void _onDiscount(PosDiscountChanged e, Emitter<PosState> emit) {
+    var value = e.value;
+    if (value.isNaN || value < 0) value = 0;
+    var type = e.type == 'percent' ? 'percent' : 'amount';
+    if (type == 'percent' && value > 100) value = 100;
+    emit(state.copyWith(discountValue: value, discountType: type));
+  }
+
   Future<void> _onCheckout(PosCheckout e, Emitter<PosState> emit) async {
     if (state.cart.isEmpty) {
       emit(state.copyWith(
@@ -361,22 +473,46 @@ class PosBloc extends Bloc<PosEvent, PosState> {
       return;
     }
     final lines = List<CartLine>.from(state.cart);
+    final discount = state.discountValue;
+    final discountType = state.discountType;
+    final subtotal = state.subtotal;
     try {
-      final result = await checkoutRepo.checkout(lines, e.amountPaid);
+      final result = await checkoutRepo.checkout(
+        lines,
+        e.amountPaid,
+        discount: discount,
+        discountType: discountType,
+      );
       emit(state.copyWith(
         status: PosStatus.checkoutSuccess,
         lastInvoiceNumber: result.invoiceNumber,
         lastTotal: result.total,
         lastLines: lines,
         lastAmountPaid: e.amountPaid,
+        lastDiscount: discount,
+        lastDiscountType: discountType,
+        lastSubtotal: subtotal,
         cart: [],
+        discountValue: 0,
+        // تحديث أرقام المخزون في الشبكة بعد الخصم
+        catalog: await repo.search(state.query),
+        favorites: await repo.favorites(),
       ));
-    } catch (_) {
+    } catch (err) {
+      final msg = err is StateError
+          ? err.message
+          : 'تعذر حفظ الفاتورة — حاول مجدداً';
       emit(state.copyWith(
         status: PosStatus.failure,
-        error: 'تعذر حفظ الفاتورة — حاول مجدداً',
+        error: msg,
       ));
-      emit(state.copyWith(status: PosStatus.ready, error: null));
+      emit(state.copyWith(
+        status: PosStatus.ready,
+        error: null,
+        // تحديث الأرقام (قد يكون المخزون تغير من مصدر آخر)
+        catalog: await repo.search(state.query),
+        favorites: await repo.favorites(),
+      ));
     }
   }
 }

@@ -1,12 +1,18 @@
 import 'dart:typed_data';
 
+import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import 'pdf_builders.dart';
 import 'pdf_purchase.dart';
 
-/// طباعة A4 عادية (حسب اختيارك — بدون طابعة حرارية)
+/// طباعة الفواتير (A5 افتراضياً — قابل للتبديل من الإعدادات)
+/// وملصقات الباركود وأوامر الشراء (A4) — بدون طابعة حرارية.
+/// يُحوّل نص الإعداد ('a5'/'a4') إلى مقاس عبر [paperFormatOf].
 class A4PrintService {
+  static PdfPageFormat paperFormatOf(String paperSize) =>
+      paperSize == 'a4' ? PdfPageFormat.a4 : PdfPageFormat.a5;
+
   /// معاينة + طباعة فاتورة
   static Future<void> printInvoice({
     required String shopName,
@@ -14,10 +20,13 @@ class A4PrintService {
     required DateTime date,
     required List<InvoiceLine> lines,
     required double amountPaid,
+    double discount = 0,
+    String? discountLabel,
     String? cashier,
     String currency = 'درهم',
     String? phone,
     List<int>? logoBytes,
+    PdfPageFormat pageFormat = PdfPageFormat.a5,
   }) async {
     final bytes = await PdfInvoiceBuilder.build(
       shopName: shopName,
@@ -25,14 +34,19 @@ class A4PrintService {
       date: date,
       lines: lines,
       amountPaid: amountPaid,
+      discount: discount,
+      discountLabel: discountLabel,
       cashier: cashier,
       currency: currency,
       phone: phone,
       logoBytes: logoBytes,
+      pageFormat: pageFormat,
     );
     await Printing.layoutPdf(
       onLayout: (_) async => Uint8List.fromList(bytes),
       name: invoiceNumber,
+      // يظهر هذا المقاس تلقائياً في حوار الطباعة (Size) دون تغيير يدوي.
+      format: pageFormat,
     );
   }
 

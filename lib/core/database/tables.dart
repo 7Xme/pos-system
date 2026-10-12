@@ -43,8 +43,12 @@ class Invoices extends Table {
   TextColumn get invoiceNumber => text().unique()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   TextColumn get cashier => text().withDefault(const Constant('كاشير'))();
-  // حسب اختيارك: مجموع فقط (subtotal == total)
+  // total = الصافي بعد الخصم (v3: discount + discountType)
   RealColumn get total => real()();
+  RealColumn get discount => real().withDefault(const Constant(0))();
+  // amount | percent
+  TextColumn get discountType =>
+      text().withDefault(const Constant('amount'))();
   RealColumn get amountPaid => real()();
   RealColumn get change => real().withDefault(const Constant(0))();
   TextColumn get notes => text().nullable()();
@@ -59,6 +63,8 @@ class InvoiceItems extends Table {
   // نسخة من السعر وقت البيع (حتى لو تغير سعر المنتج لاحقاً)
   RealColumn get unitPrice => real()();
   RealColumn get lineTotal => real()();
+  // نسخة من اسم الصنف وقت البيع (لسجل المبيعات حتى لو حُذف المنتج) — v3
+  TextColumn get productName => text().withDefault(const Constant(''))();
 }
 
 class PurchaseOrders extends Table {

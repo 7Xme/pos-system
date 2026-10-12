@@ -29,7 +29,7 @@ class AppDatabase extends _$AppDatabase {
       : super(DatabaseConnection(NativeDatabase.memory()));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -38,6 +38,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 2) {
             await m.addColumn(products, products.isFavorite);
             await m.createTable(settings);
+          }
+          if (from < 3) {
+            await m.addColumn(invoices, invoices.discount);
+            await m.addColumn(invoices, invoices.discountType);
+            await m.addColumn(invoiceItems, invoiceItems.productName);
           }
         },
       );
@@ -91,12 +96,16 @@ class AppDatabase extends _$AppDatabase {
     required double total,
     required double amountPaid,
     required List<InvoiceItemsCompanion> items,
+    double discount = 0,
+    String discountType = 'amount',
   }) {
     return transaction(() async {
       final id = await into(invoices).insert(
         InvoicesCompanion(
           invoiceNumber: Value(invoiceNumber),
           total: Value(total),
+          discount: Value(discount),
+          discountType: Value(discountType),
           amountPaid: Value(amountPaid),
           change: Value(amountPaid - total),
         ),
@@ -118,6 +127,77 @@ class AppDatabase extends _$AppDatabase {
       }
       return id;
     });
+  }
+
+  // ── سجل المبيعات (v3) ──────────────────────────────────────
+
+  /// أحدث الفواتير (الأحدث أولاً) — مع حد أقصى.
+  Future<List<Invoice>> recentInvoices({int limit = 100}) {
+    return (select(invoices)
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  /// فواتير يوم معيّن (بحسب التاريخ المحلي).
+  Future<List<Invoice>> invoicesOnDay(DateTime day) {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    return (select(invoices)
+          ..where(
+            (t) =>
+                t.createdAt.isBiggerOrEqualValue(start) &
+                t.createdAt.isSmallerThanValue(end),
+          )
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
+  /// سطور فاتورة معيّنة.
+  Future<List<InvoiceItem>> invoiceItemsOf(int invoiceId) {
+    return (select(invoiceItems)
+          ..where((t) => t.invoiceId.equals(invoiceId))
+          ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+        .get();
+  }
+
+  /// بحث برقم الفاتورة (مطابقة جزئية).
+  Future<List<Invoice>> searchInvoices(String query, {int limit = 100}) {
+    final q = '%${query.trim()}%';
+    return (select(invoices)
+          ..where((t) => t.invoiceNumber.like(q))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  /// عدد الأصناف (مجموع الكميات) لكل فاتورة — مفتاح: invoiceId.
+  Future<Map<int, int>> invoiceItemCounts() async {
+    final counts = <int, int>{};
+    final rows = await customSelect(
+      'SELECT invoice_id AS iid, COALESCE(SUM(qty), 0) AS q '
+      'FROM invoice_items GROUP BY invoice_id',
+      readsFrom: {invoiceItems},
+    ).get();
+    for (final r in rows) {
+      counts[r.read<int>('iid')] = r.read<int>('q');
+    }
+    return counts;
+  }
+
+  /// إجمالي المبيعات ليوم معيّن (صافي بعد الخصم).
+  Future<double> salesTotalOnDay(DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final sum = invoices.total.sum();
+    final q = selectOnly(invoices)
+      ..addColumns([sum])
+      ..where(
+        invoices.createdAt.isBiggerOrEqualValue(start) &
+            invoices.createdAt.isSmallerThanValue(end),
+      );
+    final row = await q.getSingle();
+    return row.read(sum) ?? 0;
   }
 
   // ── إدارة المخزون (منتجات + فئات) ──────────────────────────

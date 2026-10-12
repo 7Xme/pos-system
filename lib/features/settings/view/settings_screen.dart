@@ -415,6 +415,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             const SizedBox(height: 8),
                             const Text(
+                              'حجم ورق الفاتورة',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: 'a5',
+                                  label: Text('A5'),
+                                  icon: Icon(
+                                    Icons.description_outlined,
+                                  ),
+                                ),
+                                ButtonSegment(
+                                  value: 'a4',
+                                  label: Text('A4'),
+                                  icon: Icon(
+                                    Icons.description_outlined,
+                                  ),
+                                ),
+                              ],
+                              selected: {s.paperSize},
+                              onSelectionChanged: (v) => cubit.update(
+                                paperSize: v.first,
+                              ),
+                            ),
+                            const Text(
+                              'يظهر المقاس المختار تلقائياً في حوار الطباعة.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
                               'مصدر الصوت',
                               style: TextStyle(
                                 fontSize: 16,

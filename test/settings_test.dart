@@ -21,7 +21,26 @@ void main() {
       expect(cubit.state.ttsSource, TtsSource.auto);
       expect(cubit.state.soundEnabled, true);
       expect(cubit.state.autoPrint, true);
+      expect(cubit.state.paperSize, 'a5');
       await cubit.close();
+    });
+
+    test('حجم ورق الفاتورة يُحفظ ويُسترجع وقيمته الغريبة تُطبَّع A5',
+        () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final cubit = SettingsCubit(db: db);
+      await cubit.update(paperSize: 'a4');
+      expect(cubit.state.paperSize, 'a4');
+
+      final cubit2 = SettingsCubit(db: db);
+      await cubit2.load();
+      expect(cubit2.state.paperSize, 'a4');
+
+      await cubit.update(paperSize: 'xx');
+      expect(cubit.state.paperSize, 'a5');
+      await cubit.close();
+      await cubit2.close();
     });
 
     test('التحديث يُحفظ ويُسترجع بعد إعادة التحميل', () async {
@@ -126,6 +145,9 @@ void main() {
       expect(find.text('أونلاين'), findsOneWidget);
       expect(find.text('تشغيل اختبار الصوت'), findsOneWidget);
       expect(find.text('العملة (مثال: درهم)'), findsOneWidget);
+      expect(find.text('حجم ورق الفاتورة'), findsOneWidget);
+      expect(find.text('A5'), findsOneWidget);
+      expect(find.text('A4'), findsOneWidget);
     });
   });
 }

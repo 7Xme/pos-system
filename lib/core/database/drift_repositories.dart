@@ -44,9 +44,22 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
   @override
   Future<({String invoiceNumber, double total})> checkout(
     List<CartLine> cart,
-    double amountPaid,
-  ) async {
-    final total = cart.fold<double>(0, (s, e) => s + e.total);
+    double amountPaid, {
+    double discount = 0,
+    String discountType = 'amount',
+  }) async {
+    final subtotal = cart.fold<double>(0, (s, e) => s + e.total);
+    final total = applyDiscount(subtotal, discount, discountType);
+    // تحقق صارم من المخزون الحالي قبل الحفظ (يمنع البيع السالب)
+    for (final l in cart) {
+      final prod = await db.getProduct(l.product.id);
+      if (prod == null || prod.stockQty < l.qty) {
+        throw StateError(
+          'المتاح من «${l.product.name}»: ${prod?.stockQty ?? 0} فقط '
+          '(المطلوب ${l.qty})',
+        );
+      }
+    }
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     final invNo =
@@ -58,6 +71,7 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
           qty: Value(l.qty),
           unitPrice: Value(l.product.price),
           lineTotal: Value(l.total),
+          productName: Value(l.product.name),
         ),
     ];
     await db.saveInvoiceWithItems(
@@ -65,6 +79,10 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
       total: total,
       amountPaid: amountPaid,
       items: items,
+      discount: discountType == 'percent'
+          ? subtotal - total // القيمة المحسوبة بالدرهم
+          : discount.clamp(0, subtotal),
+      discountType: discountType,
     );
     return (invoiceNumber: invNo, total: total);
   }

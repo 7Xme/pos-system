@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/printing/a4_print_service.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/inventory_bloc.dart';
 import 'product_form_dialog.dart';
@@ -333,7 +334,7 @@ class _ProductTile extends StatelessWidget {
                     tooltip: 'تثبيت كزر اختصار',
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: SizedBox(
                     height: 44,
@@ -344,10 +345,24 @@ class _ProductTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 SizedBox(
                   height: 44,
-                  width: 48,
+                  width: 44,
+                  child: IconButton.outlined(
+                    onPressed: () =>
+                        _printLabels(context, product, currency),
+                    icon: const Icon(
+                      Icons.barcode_reader,
+                      size: 22,
+                    ),
+                    tooltip: 'طباعة ملصقات باركود',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                SizedBox(
+                  height: 44,
+                  width: 44,
                   child: IconButton.outlined(
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline, size: 22),
@@ -362,7 +377,6 @@ class _ProductTile extends StatelessWidget {
       ),
     );
   }
-
   Widget _thumb(String? path) {
     if (path != null && File(path).existsSync()) {
       return ClipRRect(
@@ -377,5 +391,69 @@ class _ProductTile extends StatelessWidget {
       ),
       child: const Icon(Icons.image_outlined, size: 36, color: Colors.grey),
     );
+  }
+
+  /// حوار عدد النسخ ثم طباعة ملصقات باركود الصنف.
+  Future<void> _printLabels(
+    BuildContext context,
+    InventoryProduct product,
+    String currency,
+  ) async {
+    final ctrl = TextEditingController(text: '12');
+    final count = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('ملصقات: ${product.name}'),
+        content: SizedBox(
+          width: 300,
+          child: TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'عدد الملصقات (1-200)',
+            ),
+            onSubmitted: (_) => Navigator.pop(
+              ctx,
+              int.tryParse(ctrl.text.trim()),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              ctx,
+              int.tryParse(ctrl.text.trim()),
+            ),
+            child: const Text('طباعة'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (count == null || !context.mounted) return;
+    final n = count.clamp(1, 200);
+    try {
+      await A4PrintService.printBarcodeSheet(
+        List.filled(
+          n,
+          (
+            name: product.name,
+            barcode: product.barcode,
+            price: product.price,
+          ),
+        ),
+        currency: currency,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر الطباعة: $e')),
+      );
+    }
   }
 }

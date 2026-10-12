@@ -12,6 +12,7 @@ import 'core/tts/arabic_tts_service.dart';
 import 'features/inventory/bloc/inventory_bloc.dart';
 import 'features/pos/bloc/pos_bloc.dart';
 import 'features/purchases/bloc/purchases_bloc.dart';
+import 'features/sales/bloc/sales_bloc.dart';
 import 'features/settings/bloc/settings_cubit.dart';
 
 Future<void> main() async {
@@ -58,37 +59,43 @@ class BookstorePosApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (_) => PosBloc(
-            repo: DriftCatalogRepository(db),
-            checkoutRepo: DriftCheckoutRepository(db),
+    return RepositoryProvider<AppDatabase>.value(
+      value: db,
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (_) => PosBloc(
+              repo: DriftCatalogRepository(db),
+              checkoutRepo: DriftCheckoutRepository(db),
+            ),
           ),
-        ),
-        BlocProvider(
-          create: (_) => InventoryBloc(db: db),
-        ),
-        BlocProvider(
-          create: (_) => PurchasesBloc(db: db),
-        ),
-        BlocProvider(
-          create: (_) => SettingsCubit(db: db)..load(),
-        ),
-      ],
-      child: MaterialApp(
-        title: 'نقطة البيع — مكتبة',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        // RTL كامل + عربي
-        locale: const Locale('ar'),
-        supportedLocales: const [Locale('ar'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
+          BlocProvider(
+            create: (_) => InventoryBloc(db: db),
+          ),
+          BlocProvider(
+            create: (_) => PurchasesBloc(db: db),
+          ),
+          BlocProvider(
+            create: (_) => SalesBloc(db: db),
+          ),
+          BlocProvider(
+            create: (_) => SettingsCubit(db: db)..load(),
+          ),
         ],
-        home: const AppShell(),
+        child: MaterialApp(
+          title: 'نقطة البيع — مكتبة',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(),
+          // RTL كامل + عربي
+          locale: const Locale('ar'),
+          supportedLocales: const [Locale('ar'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AppShell(),
+        ),
       ),
     );
   }

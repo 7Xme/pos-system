@@ -16,6 +16,9 @@ class ShopSettings extends Equatable {
   final bool autoPrint;
   final TtsSource ttsSource;
 
+  /// حجم ورق الفاتورة: 'a5' (افتراضي) أو 'a4'.
+  final String paperSize;
+
   const ShopSettings({
     this.shopName = 'مكتبة النجاح',
     this.cashier = 'كاشير',
@@ -25,6 +28,7 @@ class ShopSettings extends Equatable {
     this.soundEnabled = true,
     this.autoPrint = true,
     this.ttsSource = TtsSource.auto,
+    this.paperSize = 'a5',
   });
 
   ShopSettings copyWith({
@@ -36,6 +40,7 @@ class ShopSettings extends Equatable {
     bool? soundEnabled,
     bool? autoPrint,
     TtsSource? ttsSource,
+    String? paperSize,
   }) {
     return ShopSettings(
       shopName: shopName ?? this.shopName,
@@ -46,6 +51,9 @@ class ShopSettings extends Equatable {
       soundEnabled: soundEnabled ?? this.soundEnabled,
       autoPrint: autoPrint ?? this.autoPrint,
       ttsSource: ttsSource ?? this.ttsSource,
+      paperSize: paperSize == null
+          ? this.paperSize
+          : (paperSize == 'a4' ? 'a4' : 'a5'),
     );
   }
 
@@ -59,6 +67,7 @@ class ShopSettings extends Equatable {
         soundEnabled,
         autoPrint,
         ttsSource,
+        paperSize,
       ];
 }
 
@@ -74,6 +83,7 @@ class SettingsCubit extends Cubit<ShopSettings> {
   static const kSound = 'sound_enabled';
   static const kPrint = 'auto_print';
   static const kTts = 'tts_source';
+  static const kPaper = 'invoice_paper';
 
   static TtsSource parseSource(String? v) =>
       TtsSource.values.asNameMap()[v] ?? TtsSource.auto;
@@ -91,6 +101,9 @@ class SettingsCubit extends Cubit<ShopSettings> {
         soundEnabled: (await db.getSetting(kSound) ?? '1') == '1',
         autoPrint: (await db.getSetting(kPrint) ?? '1') == '1',
         ttsSource: parseSource(await db.getSetting(kTts)),
+        paperSize: (await db.getSetting(kPaper) ?? 'a5') == 'a4'
+            ? 'a4'
+            : 'a5',
       ));
     } catch (_) {
       // تبقى القيم الافتراضية
@@ -106,6 +119,7 @@ class SettingsCubit extends Cubit<ShopSettings> {
     bool? soundEnabled,
     bool? autoPrint,
     TtsSource? ttsSource,
+    String? paperSize,
   }) async {
     final next = state.copyWith(
       shopName: shopName,
@@ -116,6 +130,7 @@ class SettingsCubit extends Cubit<ShopSettings> {
       soundEnabled: soundEnabled,
       autoPrint: autoPrint,
       ttsSource: ttsSource,
+      paperSize: paperSize,
     );
     emit(next);
     try {
@@ -133,6 +148,7 @@ class SettingsCubit extends Cubit<ShopSettings> {
       await db.setSetting(kSound, next.soundEnabled ? '1' : '0');
       await db.setSetting(kPrint, next.autoPrint ? '1' : '0');
       await db.setSetting(kTts, next.ttsSource.name);
+      await db.setSetting(kPaper, next.paperSize);
     } catch (_) {
       // التجاهل: الواجهة محدثة والخطأ غير قاتل
     }

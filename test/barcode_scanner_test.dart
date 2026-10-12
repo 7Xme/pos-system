@@ -29,6 +29,13 @@ KeyDownEvent _enter() => KeyDownEvent(
       physicalKey: PhysicalKeyboardKey.enter,
     );
 
+KeyDownEvent _keyP() => KeyDownEvent(
+      timeStamp: Duration.zero,
+      logicalKey: LogicalKeyboardKey.keyP,
+      physicalKey: PhysicalKeyboardKey.keyP,
+      character: 'p',
+    );
+
 void main() {
   setUp(() {
     BarcodeScannerService.captureEnabled = true;
@@ -105,7 +112,7 @@ void main() {
       await sub.cancel();
     });
 
-    test('Enter وحيد (ليس مسحاً) يستدعي إتمام البيع ويُلتهم', () async {
+    test('زر P يستدعي إتمام البيع ويُلتهم', () async {
       var calls = 0;
       BarcodeScannerService.onCheckoutHotkey = () => calls++;
       addTearDown(
@@ -115,11 +122,29 @@ void main() {
       final codes = <String>[];
       final sub = BarcodeScannerService.stream.listen(codes.add);
 
-      expect(BarcodeScannerService.handleKey(_enter()), true);
+      expect(BarcodeScannerService.handleKey(_keyP()), true);
       await Future.delayed(Duration.zero);
 
       expect(calls, 1);
       expect(codes, isEmpty); // ليس مسحاً — لا صنف مضاف
+      await sub.cancel();
+    });
+
+    test('Enter وحيد لم يعد يُتمم البيع', () async {
+      var calls = 0;
+      BarcodeScannerService.onCheckoutHotkey = () => calls++;
+      addTearDown(
+        () => BarcodeScannerService.onCheckoutHotkey = null,
+      );
+
+      final codes = <String>[];
+      final sub = BarcodeScannerService.stream.listen(codes.add);
+
+      expect(BarcodeScannerService.handleKey(_enter()), false);
+      await Future.delayed(Duration.zero);
+
+      expect(calls, 0);
+      expect(codes, isEmpty);
       await sub.cancel();
     });
 

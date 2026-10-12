@@ -30,7 +30,7 @@ class BarcodeScannerService {
   /// في IndexedStack) حتى لا يلتهم الماسح كتابة شاشات المخزون.
   static bool captureEnabled = true;
 
-  /// يُستدعى عند ضغط Enter عام (ليس مسحاً ولا إدخال نص) لإتمام البيع.
+  /// يُستدعى عند ضغط زر إتمام البيع (حرف P) لإتمام البيع.
   /// تضبطه شاشة البيع وتُصفّره عند التخلص منها.
   static void Function()? onCheckoutHotkey;
 
@@ -56,6 +56,12 @@ class BarcodeScannerService {
     if (logical == LogicalKeyboardKey.enter ||
         logical == LogicalKeyboardKey.numpadEnter) {
       return _onEnter();
+    }
+
+    // زر إتمام البيع (Hotkey): الحرف P — نتحقق من الموقع الفيزيائي للمفتاح
+    // حتى يعمل بنفس المكان مع أي لغة لوحة مفاتيح (عربي/إنجليزي).
+    if (event.physicalKey == PhysicalKeyboardKey.keyP) {
+      return _onCheckoutHotkey();
     }
 
     final char = event.character;
@@ -114,13 +120,18 @@ class BarcodeScannerService {
       _controller.add(code);
       return true; // نلتهم Enter حتى لا يضغط زراً مركزاً بالخطأ.
     }
-    // ليس مسحاً: Enter وحيد = إتمام البيع — بشرط ألا يكون المستخدم
-    // يكتب نصاً في حقل (عندها نترك الحقل يتصرف).
+    // ليس مسحاً: نترك Enter للواجهة (إرسال الحقول/الأزرار).
+    return false;
+  }
+
+  /// زر إتمام البيع (P): يُتِم البيع ما لم يكن المستخدم يكتب نصاً في حقل.
+  static bool _onCheckoutHotkey() {
+    _reset();
     if (onCheckoutHotkey != null && _focusedText().isEmpty) {
       onCheckoutHotkey!();
-      return true;
+      return true; // نلتهم الحرف حتى لا يُكتب «p» في الحقل.
     }
-    return false;
+    return false; // يكتب «p» عادةً داخل الحقل.
   }
 
   /// نص حقل الإدخال المركّز حالياً، أو '' إن لم يكن هناك حقل نصي.
