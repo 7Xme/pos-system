@@ -56,6 +56,46 @@ class SalesRefreshed extends SalesEvent {
   const SalesRefreshed();
 }
 
+/// تحميل ملخص الإغلاق اليومي (Z-report).
+class SalesClosingRequested extends SalesEvent {
+  const SalesClosingRequested();
+}
+
+/// ملخص الإغلاق اليومي للعرض والطباعة.
+class ClosingSummary extends Equatable {
+  final int invoiceCount;
+  final double gross;
+  final double discount;
+  final double net;
+  final double paid;
+  final double change;
+  final int itemsSold;
+  final List<({String name, int qty, double total})> top;
+
+  const ClosingSummary({
+    required this.invoiceCount,
+    required this.gross,
+    required this.discount,
+    required this.net,
+    required this.paid,
+    required this.change,
+    required this.itemsSold,
+    this.top = const [],
+  });
+
+  @override
+  List<Object?> get props => [
+        invoiceCount,
+        gross,
+        discount,
+        net,
+        paid,
+        change,
+        itemsSold,
+        top,
+      ];
+}
+
 // ── State ─────────────────────────────────────────────────
 enum SalesStatus { initial, loading, ready }
 
@@ -68,6 +108,8 @@ class SalesState extends Equatable {
   final Invoice? selected;
   final List<InvoiceItem> selectedItems;
   final bool detailLoading;
+  final ClosingSummary? closing;
+  final bool closingLoading;
 
   const SalesState({
     this.status = SalesStatus.initial,
@@ -78,6 +120,8 @@ class SalesState extends Equatable {
     this.selected,
     this.selectedItems = const [],
     this.detailLoading = false,
+    this.closing,
+    this.closingLoading = false,
   });
 
   int get count => invoices.length;
@@ -92,6 +136,8 @@ class SalesState extends Equatable {
     List<InvoiceItem>? selectedItems,
     bool? detailLoading,
     bool clearSelected = false,
+    ClosingSummary? closing,
+    bool? closingLoading,
   }) {
     return SalesState(
       status: status ?? this.status,
@@ -103,6 +149,8 @@ class SalesState extends Equatable {
       selectedItems:
           clearSelected ? const [] : (selectedItems ?? this.selectedItems),
       detailLoading: detailLoading ?? this.detailLoading,
+      closing: closing ?? this.closing,
+      closingLoading: closingLoading ?? this.closingLoading,
     );
   }
 
@@ -116,6 +164,8 @@ class SalesState extends Equatable {
         selected,
         selectedItems,
         detailLoading,
+        closing,
+        closingLoading,
       ];
 }
 
@@ -132,6 +182,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       (e, emit) => emit(state.copyWith(clearSelected: true)),
     );
     on<SalesRefreshed>((e, emit) => _onStarted(const SalesStarted(), emit));
+    on<SalesClosingRequested>(_onClosing);
   }
 
   Future<void> _onStarted(SalesStarted e, Emitter<SalesState> emit) async {
@@ -174,6 +225,29 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
           SavedInvoice(invoice: inv, itemCount: counts[inv.id] ?? 0),
       ],
       dayTotal: dayTotal,
+    ));
+  }
+
+  Future<void> _onClosing(
+    SalesClosingRequested e,
+    Emitter<SalesState> emit,
+  ) async {
+    emit(state.copyWith(closingLoading: true));
+    final now = DateTime.now();
+    final s = await db.closingSummaryOnDay(now);
+    final top = await db.topProductsOnDay(now);
+    emit(state.copyWith(
+      closingLoading: false,
+      closing: ClosingSummary(
+        invoiceCount: s.invoiceCount,
+        gross: s.gross,
+        discount: s.discount,
+        net: s.net,
+        paid: s.paid,
+        change: s.change,
+        itemsSold: s.itemsSold,
+        top: top,
+      ),
     ));
   }
 

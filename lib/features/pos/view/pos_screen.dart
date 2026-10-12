@@ -87,7 +87,8 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _checkout(PosState state) async {
     final paid = double.tryParse(_paidCtrl.text.trim()) ?? state.total;
-    context.read<PosBloc>().add(PosCheckout(paid));
+    final cashier = context.read<SettingsCubit>().state.cashier;
+    context.read<PosBloc>().add(PosCheckout(paid, cashier: cashier));
   }
 
   /// باركود غير موجود: يفتح نموذج الإضافة السريعة مع تعطيل الماسح مؤقتاً

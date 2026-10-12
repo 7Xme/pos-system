@@ -185,9 +185,10 @@ class PosDiscountChanged extends PosEvent {
 
 class PosCheckout extends PosEvent {
   final double amountPaid;
-  const PosCheckout(this.amountPaid);
+  final String? cashier;
+  const PosCheckout(this.amountPaid, {this.cashier});
   @override
-  List<Object?> get props => [amountPaid];
+  List<Object?> get props => [amountPaid, cashier];
 }
 
 class PosCheckoutHandled extends PosEvent {}
@@ -484,6 +485,7 @@ class PosBloc extends Bloc<PosEvent, PosState> {
         e.amountPaid,
         discount: discount,
         discountType: discountType,
+        cashier: e.cashier,
       );
       emit(state.copyWith(
         status: PosStatus.checkoutSuccess,

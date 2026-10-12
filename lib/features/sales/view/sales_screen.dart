@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
+import '../../../core/printing/pdf_closing.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/sales_bloc.dart';
 
@@ -94,6 +95,8 @@ class _SalesScreenState extends State<SalesScreen> {
       ],
       amountPaid: inv.amountPaid,
       discount: inv.discount,
+      // القيمة المخزنة مبلغ محسوب بالدرهم؛ العلامة توضح مصدرها فقط.
+      discountLabel: inv.discountType == 'percent' ? '%' : null,
       cashier: inv.cashier,
       currency: ctx.currency,
       phone: ctx.phone.isEmpty ? null : ctx.phone,
@@ -126,6 +129,11 @@ class _SalesScreenState extends State<SalesScreen> {
           appBar: AppBar(
             title: const Text('سجل المبيعات'),
             actions: [
+              IconButton(
+                onPressed: _showClosingDialog,
+                icon: const Icon(Icons.summarize_outlined),
+                tooltip: 'تقرير إغلاق اليوم',
+              ),
               IconButton(
                 onPressed: () =>
                     context.read<SalesBloc>().add(SalesRefreshed()),
@@ -254,6 +262,177 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
     );
     bloc.add(SalesDetailClosed());
+  }
+
+  /// حوار تقرير إغلاق اليوم (Z-report) مع الطباعة.
+  Future<void> _showClosingDialog() async {
+    final bloc = context.read<SalesBloc>();
+    final settings = context.read<SettingsCubit>().state;
+    bloc.add(const SalesClosingRequested());
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => BlocProvider.value(
+        value: bloc,
+        child: AlertDialog(
+          title: const Text('تقرير إغلاق اليوم'),
+          content: SizedBox(
+            width: 460,
+            child: BlocBuilder<SalesBloc, SalesState>(
+              builder: (_, s) {
+                if (s.closingLoading || s.closing == null) {
+                  return const SizedBox(
+                    height: 140,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _closingRow(
+                        'عدد الفواتير:',
+                        '${s.closing!.invoiceCount}',
+                        settings.currency,
+                        bold: true,
+                      ),
+                      _closingRow(
+                        'الأصناف المباعة:',
+                        '${s.closing!.itemsSold}',
+                        settings.currency,
+                      ),
+                      const Divider(),
+                      _closingRow(
+                        'الإجمالي الخام:',
+                        s.closing!.gross,
+                        settings.currency,
+                      ),
+                      _closingRow(
+                        'الخصومات:',
+                        s.closing!.discount,
+                        settings.currency,
+                        negative: true,
+                      ),
+                      _closingRow(
+                        'الصافي:',
+                        s.closing!.net,
+                        settings.currency,
+                        bold: true,
+                      ),
+                      _closingRow(
+                        'المدفوع:',
+                        s.closing!.paid,
+                        settings.currency,
+                      ),
+                      _closingRow(
+                        'الباقي للزبائن:',
+                        s.closing!.change,
+                        settings.currency,
+                      ),
+                      if (s.closing!.top.isNotEmpty) ...[
+                        const Divider(),
+                        const Text(
+                          'الأعلى مبيعاً:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        for (final t in s.closing!.top)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(t.name)),
+                                Text(
+                                  '${t.qty} — ${t.total.toStringAsFixed(2)} '
+                                  '${settings.currency}',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 52,
+                        child: FilledButton.icon(
+                          onPressed: () => _printClosing(s.closing!),
+                          icon: const Icon(Icons.print_outlined),
+                          label: const Text('طباعة التقرير'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إغلاق'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _closingRow(
+    String label,
+    Object value,
+    String currency, {
+    bool bold = false,
+    bool negative = false,
+  }) {
+    final text = value is double
+        ? '${negative ? '-' : ''}${value.toStringAsFixed(2)} $currency'
+        : value.toString();
+    final style = TextStyle(
+      fontSize: bold ? 17 : 15,
+      fontWeight: bold ? FontWeight.bold : null,
+      color: negative ? const Color(0xFFC62828) : null,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text(text, style: style),
+        ],
+      ),
+    );
+  }
+
+  /// طباعة تقرير الإغلاق بمقاس الورق المختار في الإعدادات.
+  Future<void> _printClosing(ClosingSummary c) async {
+    final s = context.read<SettingsCubit>().state;
+    try {
+      await A4PrintService.printClosing(
+        shopName: s.shopName,
+        date: DateTime.now(),
+        summary: ClosingSummaryData(
+          invoiceCount: c.invoiceCount,
+          gross: c.gross,
+          discount: c.discount,
+          net: c.net,
+          paid: c.paid,
+          change: c.change,
+          itemsSold: c.itemsSold,
+          top: c.top,
+        ),
+        currency: s.currency,
+        phone: s.phone.isEmpty ? null : s.phone,
+        pageFormat: A4PrintService.paperFormatOf(s.paperSize),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر الطباعة: $e')),
+      );
+    }
   }
 
   Widget _summaryCard(SalesState state, String currency) {

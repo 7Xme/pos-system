@@ -91,6 +91,7 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
       invoiceNumber: invNo,
       total: total,
       amountPaid: amountPaid,
+      cashier: cashier,
       items: items,
       discount: discountType == 'percent'
           ? subtotal - total // القيمة المحسوبة بالدرهم

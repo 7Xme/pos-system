@@ -98,6 +98,7 @@ class AppDatabase extends _$AppDatabase {
     required List<InvoiceItemsCompanion> items,
     double discount = 0,
     String discountType = 'amount',
+    String? cashier,
   }) {
     return transaction(() async {
       final id = await into(invoices).insert(
@@ -108,6 +109,9 @@ class AppDatabase extends _$AppDatabase {
           discountType: Value(discountType),
           amountPaid: Value(amountPaid),
           change: Value(amountPaid - total),
+          cashier: Value(
+            (cashier ?? '').trim().isEmpty ? 'كاشير' : cashier!.trim(),
+          ),
         ),
       );
       for (final item in items) {
@@ -192,6 +196,82 @@ class AppDatabase extends _$AppDatabase {
       counts[r.read<int>('iid')] = r.read<int>('q');
     }
     return counts;
+  }
+
+  /// ملخص الإغلاق اليومي: عدد الفواتير + الخام + الخصم + الصافي +
+  /// المدفوع + الباقي + الأصناف المباعة (بحسب التاريخ المحلي).
+  Future<
+      ({
+        int invoiceCount,
+        double gross,
+        double discount,
+        double net,
+        double paid,
+        double change,
+        int itemsSold,
+      })> closingSummaryOnDay(DateTime day) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final count = invoices.id.count();
+    final net = invoices.total.sum();
+    final disc = invoices.discount.sum();
+    final paid = invoices.amountPaid.sum();
+    final chg = invoices.change.sum();
+    final agg = await (selectOnly(invoices)
+          ..addColumns([count, net, disc, paid, chg])
+          ..where(
+            invoices.createdAt.isBiggerOrEqualValue(start) &
+                invoices.createdAt.isSmallerThanValue(end),
+          ))
+        .getSingle();
+    final items = await customSelect(
+      'SELECT COALESCE(SUM(ii.qty), 0) AS q FROM invoice_items ii '
+      'JOIN invoices i ON i.id = ii.invoice_id '
+      'WHERE i.created_at >= ? AND i.created_at < ?',
+      variables: [Variable<DateTime>(start), Variable<DateTime>(end)],
+      readsFrom: {invoiceItems, invoices},
+    ).getSingle();
+    final netVal = agg.read(net) ?? 0.0;
+    final discVal = agg.read(disc) ?? 0.0;
+    return (
+      invoiceCount: agg.read(count) ?? 0,
+      gross: netVal + discVal,
+      discount: discVal,
+      net: netVal,
+      paid: agg.read(paid) ?? 0.0,
+      change: agg.read(chg) ?? 0.0,
+      itemsSold: items.read<int>('q'),
+    );
+  }
+
+  /// الأعلى مبيعاً في يوم معيّن (بالاسم المحفوظ وقت البيع).
+  Future<List<({String name, int qty, double total})>> topProductsOnDay(
+    DateTime day, {
+    int limit = 5,
+  }) async {
+    final start = DateTime(day.year, day.month, day.day);
+    final end = start.add(const Duration(days: 1));
+    final rows = await customSelect(
+      'SELECT ii.product_name AS name, SUM(ii.qty) AS q, '
+      'SUM(ii.line_total) AS t FROM invoice_items ii '
+      'JOIN invoices i ON i.id = ii.invoice_id '
+      'WHERE i.created_at >= ? AND i.created_at < ? '
+      'GROUP BY ii.product_name ORDER BY q DESC LIMIT ?',
+      variables: [
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
+        Variable<int>(limit),
+      ],
+      readsFrom: {invoiceItems, invoices},
+    ).get();
+    return [
+      for (final r in rows)
+        (
+          name: r.read<String>('name'),
+          qty: r.read<int>('q'),
+          total: r.read<double>('t'),
+        ),
+    ];
   }
 
   /// إجمالي المبيعات ليوم معيّن (صافي بعد الخصم).
@@ -377,8 +457,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// استلام أمر شراء: زيادة المخزون بالكميات المطلوبة وإغلاق الأمر.
+  /// آمن ضد التكرار: الأمر المستلم مسبقاً لا يغيّر شيئاً.
+  /// يحدّث سعر الشراء بالمتوسط المرجح مع المخزون الحالي.
   Future<void> receivePurchaseOrder(int poId) {
     return transaction(() async {
+      final order = await (select(purchaseOrders)
+            ..where((t) => t.id.equals(poId)))
+          .getSingleOrNull();
+      if (order == null || order.status == 'received') return;
       final items = await (select(purchaseOrderItems)
             ..where((t) => t.poId.equals(poId)))
           .get();
@@ -387,9 +473,15 @@ class AppDatabase extends _$AppDatabase {
               ..where((t) => t.id.equals(it.productId)))
             .getSingleOrNull();
         if (prod == null) continue;
+        final newQty = prod.stockQty + it.qtyOrdered;
+        final newCost = newQty <= 0
+            ? it.unitCost
+            : (prod.stockQty * prod.cost + it.qtyOrdered * it.unitCost) /
+                newQty;
         await (update(products)..where((t) => t.id.equals(prod.id))).write(
           ProductsCompanion(
-            stockQty: Value(prod.stockQty + it.qtyOrdered),
+            stockQty: Value(newQty),
+            cost: Value(newCost),
             updatedAt: Value(DateTime.now()),
           ),
         );

@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
 import 'pdf_builders.dart';
+import 'pdf_closing.dart';
 import 'pdf_purchase.dart';
 
 /// طباعة الفواتير (A5 افتراضياً — قابل للتبديل من الإعدادات)
@@ -62,6 +63,31 @@ class A4PrintService {
     await Printing.layoutPdf(
       onLayout: (_) async => Uint8List.fromList(bytes),
       name: 'barcode-labels',
+    );
+  }
+
+  /// طباعة تقرير الإغلاق اليومي
+  static Future<void> printClosing({
+    required String shopName,
+    required DateTime date,
+    required ClosingSummaryData summary,
+    String currency = 'درهم',
+    String? phone,
+    PdfPageFormat pageFormat = PdfPageFormat.a5,
+  }) async {
+    final bytes = await PdfClosingBuilder.build(
+      shopName: shopName,
+      date: date,
+      summary: summary,
+      currency: currency,
+      phone: phone,
+      pageFormat: pageFormat,
+    );
+    await Printing.layoutPdf(
+      onLayout: (_) async => Uint8List.fromList(bytes),
+      name: 'closing-${date.year}${date.month}${date.day}',
+      // يظهر هذا المقاس تلقائياً في حوار الطباعة دون تغيير يدوي.
+      format: pageFormat,
     );
   }
 
