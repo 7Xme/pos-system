@@ -152,10 +152,23 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// حدود مدة شاملة: [بداية اليوم الأول, بداية اليوم بعد الأخير).
+  /// تُرتَّب تلقائياً إن عُكس من/إلى.
+  (DateTime, DateTime) _rangeBounds(DateTime from, DateTime to) {
+    final a = DateTime(from.year, from.month, from.day);
+    final b = DateTime(to.year, to.month, to.day);
+    final s = a.isAfter(b) ? b : a;
+    final e = (a.isAfter(b) ? a : b).add(const Duration(days: 1));
+    return (s, e);
+  }
+
   /// فواتير يوم معيّن (بحسب التاريخ المحلي).
-  Future<List<Invoice>> invoicesOnDay(DateTime day) {
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+  Future<List<Invoice>> invoicesOnDay(DateTime day) =>
+      invoicesInRange(day, day);
+
+  /// فواتير مدة معينة (شاملة اليومين).
+  Future<List<Invoice>> invoicesInRange(DateTime from, DateTime to) {
+    final (start, end) = _rangeBounds(from, to);
     return (select(invoices)
           ..where(
             (t) =>
@@ -198,8 +211,7 @@ class AppDatabase extends _$AppDatabase {
     return counts;
   }
 
-  /// ملخص الإغلاق اليومي: عدد الفواتير + الخام + الخصم + الصافي +
-  /// المدفوع + الباقي + الأصناف المباعة (بحسب التاريخ المحلي).
+  /// ملخص الإغلاق لمدة معينة (شاملة اليومين).
   Future<
       ({
         int invoiceCount,
@@ -209,9 +221,8 @@ class AppDatabase extends _$AppDatabase {
         double paid,
         double change,
         int itemsSold,
-      })> closingSummaryOnDay(DateTime day) async {
-    final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1));
+      })> closingSummaryInRange(DateTime from, DateTime to) async {
+    final (start, end) = _rangeBounds(from, to);
     final count = invoices.id.count();
     final net = invoices.total.sum();
     final disc = invoices.discount.sum();
