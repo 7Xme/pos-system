@@ -47,6 +47,14 @@ class SavedOrder extends Equatable {
   List<Object?> get props => [order, itemCount];
 }
 
+/// مولّد رقم أمر شراء فريد: طابع زمني بالمللي ثانية + لاحقة عند التعارض.
+String nextPoNumber(DateTime now, [int attempt = 0]) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final base =
+      'PO-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}${now.millisecond.toString().padLeft(3, '0')}';
+  return attempt <= 0 ? base : '$base-$attempt';
+}
+
 // ── Events ────────────────────────────────────────────────
 sealed class PurchasesEvent extends Equatable {
   const PurchasesEvent();
@@ -332,9 +340,12 @@ class PurchasesBloc extends Bloc<PurchasesEvent, PurchasesState> {
     emit(state.copyWith(status: PurchasesStatus.saving));
     try {
       final now = DateTime.now();
-      String two(int n) => n.toString().padLeft(2, '0');
-      final poNo =
-          'PO-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}';
+      var attempt = 0;
+      var poNo = nextPoNumber(now);
+      while (attempt < 5 && await db.poNumberExists(poNo)) {
+        attempt++;
+        poNo = nextPoNumber(now, attempt);
+      }
       await db.createPurchaseOrder(
         poNumber: poNo,
         supplierName: state.supplierName.trim().isEmpty

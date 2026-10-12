@@ -437,13 +437,31 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     InventoryProductDeleted e,
     Emitter<InventoryState> emit,
   ) async {
-    final target = await db.getProduct(e.id);
-    await db.deleteProduct(e.id);
-    if (target?.imagePath != null) {
-      await ProductImageStore.deleteIfExists(target!.imagePath);
+    try {
+      final target = await db.getProduct(e.id);
+      // المنتج صاحب السجل لا يُحذف (المفتاح الأجنبي يمنع) — عطّله بدلاً من ذلك.
+      if (await db.hasProductHistory(e.id)) {
+        emit(state.copyWith(
+          status: InventoryStatus.failure,
+          error: 'لا يمكن حذف «${target?.name ?? ''}» — له سجل مبيعات/مشتريات. '
+              'عطّله من نموذج التعديل بدلاً من ذلك',
+        ));
+        emit(state.copyWith(status: InventoryStatus.ready, error: null));
+        return;
+      }
+      await db.deleteProduct(e.id);
+      if (target?.imagePath != null) {
+        await ProductImageStore.deleteIfExists(target!.imagePath);
+      }
+      await _reload(emit);
+      emit(state.copyWith(notice: 'تم حذف المنتج'));
+    } catch (_) {
+      emit(state.copyWith(
+        status: InventoryStatus.failure,
+        error: 'تعذر حذف المنتج',
+      ));
+      emit(state.copyWith(status: InventoryStatus.ready, error: null));
     }
-    await _reload(emit);
-    emit(state.copyWith(notice: 'تم حذف المنتج'));
   }
 
   Future<void> _onFavoriteToggled(
@@ -481,11 +499,34 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     InventoryCategoryDeleted e,
     Emitter<InventoryState> emit,
   ) async {
-    await db.deleteCategory(e.id);
-    int? current = state.categoryFilterId;
-    if (current == e.id) current = null;
-    emit(state.copyWith(categoryFilterId: () => current));
-    await _reload(emit);
-    emit(state.copyWith(notice: 'تم حذف الفئة'));
+    try {
+      // المفتاح الأجنبي NO ACTION — الفئة ذات المنتجات لا تُحذف.
+      final counts = await db.productCountByCategory();
+      final n = counts[e.id] ?? 0;
+      if (n > 0) {
+        final name =
+            state.categories.where((c) => c.id == e.id).firstOrNull?.name ??
+                '';
+        emit(state.copyWith(
+          status: InventoryStatus.failure,
+          error: 'لا يمكن حذف فئة «$name» — فيها $n منتج. '
+              'انقل منتجاتها لفئة أخرى أولاً',
+        ));
+        emit(state.copyWith(status: InventoryStatus.ready, error: null));
+        return;
+      }
+      await db.deleteCategory(e.id);
+      int? current = state.categoryFilterId;
+      if (current == e.id) current = null;
+      emit(state.copyWith(categoryFilterId: () => current));
+      await _reload(emit);
+      emit(state.copyWith(notice: 'تم حذف الفئة'));
+    } catch (_) {
+      emit(state.copyWith(
+        status: InventoryStatus.failure,
+        error: 'تعذر حذف الفئة',
+      ));
+      emit(state.copyWith(status: InventoryStatus.ready, error: null));
+    }
   }
 }

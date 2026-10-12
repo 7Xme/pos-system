@@ -36,6 +36,15 @@ class DriftCatalogRepository implements PosCatalogRepository {
   }
 }
 
+/// مولّد رقم فاتورة فريد: طابع زمني بالمللي ثانية + لاحقة عند التعارض.
+/// يمنع تكرار الرقم عند بيعين في نفس الثانية (العمود UNIQUE).
+String nextInvoiceNumber(DateTime now, [int attempt = 0]) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final base =
+      'INV-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}${now.millisecond.toString().padLeft(3, '0')}';
+  return attempt <= 0 ? base : '$base-$attempt';
+}
+
 /// حفظ البيع الحقيقي: فاتورة + سطور + خصم مخزون (Transaction واحدة)
 class DriftCheckoutRepository implements PosCheckoutRepository {
   final AppDatabase db;
@@ -47,6 +56,7 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
     double amountPaid, {
     double discount = 0,
     String discountType = 'amount',
+    String? cashier,
   }) async {
     final subtotal = cart.fold<double>(0, (s, e) => s + e.total);
     final total = applyDiscount(subtotal, discount, discountType);
@@ -61,9 +71,12 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
       }
     }
     final now = DateTime.now();
-    String two(int n) => n.toString().padLeft(2, '0');
-    final invNo =
-        'INV-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}';
+    var attempt = 0;
+    var invNo = nextInvoiceNumber(now);
+    while (attempt < 5 && await db.invoiceNumberExists(invNo)) {
+      attempt++;
+      invNo = nextInvoiceNumber(now, attempt);
+    }
     final items = [
       for (final l in cart)
         InvoiceItemsCompanion(

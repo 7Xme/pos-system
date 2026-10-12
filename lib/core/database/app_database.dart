@@ -131,6 +131,15 @@ class AppDatabase extends _$AppDatabase {
 
   // ── سجل المبيعات (v3) ──────────────────────────────────────
 
+  /// هل رقم الفاتورة مستخدم؟ (لضمان فرادة الرقم عند البيع السريع)
+  Future<bool> invoiceNumberExists(String no) async {
+    final row = await (select(invoices)
+          ..where((t) => t.invoiceNumber.equals(no))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
   /// أحدث الفواتير (الأحدث أولاً) — مع حد أقصى.
   Future<List<Invoice>> recentInvoices({int limit = 100}) {
     return (select(invoices)
@@ -219,7 +228,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> deleteCategory(int id) {
-    // المنتجات المرتبطة تصبح بدون فئة (SET NULL حسب المخطط)
+    // ملاحظة: المفتاح الأجنبي للمنتجات NO ACTION — يجب التأكد من خلو
+    // الفئة من المنتجات قبل الحذف (يفعل ذلك InventoryBloc).
     return (delete(categories)..where((t) => t.id.equals(id))).go();
   }
 
@@ -258,6 +268,20 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> deleteProduct(int id) {
     return (delete(products)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// هل للمنتج سجل (فواتير أو أوامر شراء)؟ — يمنع حذفه للحفاظ على السجل.
+  Future<bool> hasProductHistory(int id) async {
+    final sale = await (select(invoiceItems)
+          ..where((t) => t.productId.equals(id))
+          ..limit(1))
+        .getSingleOrNull();
+    if (sale != null) return true;
+    final po = await (select(purchaseOrderItems)
+          ..where((t) => t.productId.equals(id))
+          ..limit(1))
+        .getSingleOrNull();
+    return po != null;
   }
 
   // ── المفضلة (أزرار الاختصار) + الإعدادات — v2 ────────────
@@ -316,6 +340,15 @@ class AppDatabase extends _$AppDatabase {
       }
       return id;
     });
+  }
+
+  /// هل رقم أمر الشراء مستخدم؟ (لضمان فرادة الرقم)
+  Future<bool> poNumberExists(String no) async {
+    final row = await (select(purchaseOrders)
+          ..where((t) => t.poNumber.equals(no))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
   }
 
   Future<List<PurchaseOrder>> allPurchaseOrders() {

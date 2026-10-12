@@ -50,6 +50,7 @@ abstract class PosCheckoutRepository {
     double amountPaid, {
     double discount = 0,
     String discountType = 'amount',
+    String? cashier,
   });
 }
 
@@ -63,6 +64,7 @@ class DemoCheckoutRepository implements PosCheckoutRepository {
     double amountPaid, {
     double discount = 0,
     String discountType = 'amount',
+    String? cashier,
   }) async {
     final subtotal = cart.fold<double>(0, (s, e) => s + e.total);
     final total = applyDiscount(subtotal, discount, discountType);
