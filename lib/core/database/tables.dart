@@ -65,6 +65,32 @@ class InvoiceItems extends Table {
   RealColumn get lineTotal => real()();
   // نسخة من اسم الصنف وقت البيع (لسجل المبيعات حتى لو حُذف المنتج) — v3
   TextColumn get productName => text().withDefault(const Constant(''))();
+  // نسخة من التكلفة وقت البيع (لتقرير الأرباح) — v4 (القديم = 0: مستبعد)
+  RealColumn get unitCost => real().withDefault(const Constant(0))();
+}
+
+/// المرتجعات — v4: إرجاع جزئي لأصناف فاتورة مع استعادة المخزون.
+class Returns extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get returnNumber => text().unique()();
+  IntColumn get invoiceId => integer().references(Invoices, #id)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  TextColumn get reason => text().withDefault(const Constant(''))();
+  RealColumn get total => real()();
+  TextColumn get cashier => text().withDefault(const Constant('كاشير'))();
+}
+
+class ReturnItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get returnId =>
+      integer().references(Returns, #id, onDelete: KeyAction.cascade)();
+  IntColumn get productId => integer().references(Products, #id)();
+  IntColumn get qty => integer()();
+  RealColumn get unitPrice => real()();
+  // نسخة من تكلفة سطر الفاتورة الأصلي (لصافي الربح بعد المردودات)
+  RealColumn get unitCost => real().withDefault(const Constant(0))();
+  RealColumn get lineTotal => real()();
+  TextColumn get productName => text().withDefault(const Constant(''))();
 }
 
 class PurchaseOrders extends Table {

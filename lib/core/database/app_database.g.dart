@@ -1433,9 +1433,25 @@ class $InvoiceItemsTable extends InvoiceItems
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(''));
+  static const VerificationMeta _unitCostMeta =
+      const VerificationMeta('unitCost');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, invoiceId, productId, qty, unitPrice, lineTotal, productName];
+  late final GeneratedColumn<double> unitCost = GeneratedColumn<double>(
+      'unit_cost', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        invoiceId,
+        productId,
+        qty,
+        unitPrice,
+        lineTotal,
+        productName,
+        unitCost
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1485,6 +1501,10 @@ class $InvoiceItemsTable extends InvoiceItems
           productName.isAcceptableOrUnknown(
               data['product_name']!, _productNameMeta));
     }
+    if (data.containsKey('unit_cost')) {
+      context.handle(_unitCostMeta,
+          unitCost.isAcceptableOrUnknown(data['unit_cost']!, _unitCostMeta));
+    }
     return context;
   }
 
@@ -1508,6 +1528,8 @@ class $InvoiceItemsTable extends InvoiceItems
           .read(DriftSqlType.double, data['${effectivePrefix}line_total'])!,
       productName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}product_name'])!,
+      unitCost: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}unit_cost'])!,
     );
   }
 
@@ -1525,6 +1547,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
   final double unitPrice;
   final double lineTotal;
   final String productName;
+  final double unitCost;
   const InvoiceItem(
       {required this.id,
       required this.invoiceId,
@@ -1532,7 +1555,8 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
       required this.qty,
       required this.unitPrice,
       required this.lineTotal,
-      required this.productName});
+      required this.productName,
+      required this.unitCost});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1543,6 +1567,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
     map['unit_price'] = Variable<double>(unitPrice);
     map['line_total'] = Variable<double>(lineTotal);
     map['product_name'] = Variable<String>(productName);
+    map['unit_cost'] = Variable<double>(unitCost);
     return map;
   }
 
@@ -1555,6 +1580,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
       unitPrice: Value(unitPrice),
       lineTotal: Value(lineTotal),
       productName: Value(productName),
+      unitCost: Value(unitCost),
     );
   }
 
@@ -1569,6 +1595,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
       unitPrice: serializer.fromJson<double>(json['unitPrice']),
       lineTotal: serializer.fromJson<double>(json['lineTotal']),
       productName: serializer.fromJson<String>(json['productName']),
+      unitCost: serializer.fromJson<double>(json['unitCost']),
     );
   }
   @override
@@ -1582,6 +1609,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
       'unitPrice': serializer.toJson<double>(unitPrice),
       'lineTotal': serializer.toJson<double>(lineTotal),
       'productName': serializer.toJson<String>(productName),
+      'unitCost': serializer.toJson<double>(unitCost),
     };
   }
 
@@ -1592,7 +1620,8 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
           int? qty,
           double? unitPrice,
           double? lineTotal,
-          String? productName}) =>
+          String? productName,
+          double? unitCost}) =>
       InvoiceItem(
         id: id ?? this.id,
         invoiceId: invoiceId ?? this.invoiceId,
@@ -1601,6 +1630,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
         unitPrice: unitPrice ?? this.unitPrice,
         lineTotal: lineTotal ?? this.lineTotal,
         productName: productName ?? this.productName,
+        unitCost: unitCost ?? this.unitCost,
       );
   InvoiceItem copyWithCompanion(InvoiceItemsCompanion data) {
     return InvoiceItem(
@@ -1612,6 +1642,7 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
       lineTotal: data.lineTotal.present ? data.lineTotal.value : this.lineTotal,
       productName:
           data.productName.present ? data.productName.value : this.productName,
+      unitCost: data.unitCost.present ? data.unitCost.value : this.unitCost,
     );
   }
 
@@ -1624,14 +1655,15 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
           ..write('lineTotal: $lineTotal, ')
-          ..write('productName: $productName')
+          ..write('productName: $productName, ')
+          ..write('unitCost: $unitCost')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, invoiceId, productId, qty, unitPrice, lineTotal, productName);
+  int get hashCode => Object.hash(id, invoiceId, productId, qty, unitPrice,
+      lineTotal, productName, unitCost);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1642,7 +1674,8 @@ class InvoiceItem extends DataClass implements Insertable<InvoiceItem> {
           other.qty == this.qty &&
           other.unitPrice == this.unitPrice &&
           other.lineTotal == this.lineTotal &&
-          other.productName == this.productName);
+          other.productName == this.productName &&
+          other.unitCost == this.unitCost);
 }
 
 class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
@@ -1653,6 +1686,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
   final Value<double> unitPrice;
   final Value<double> lineTotal;
   final Value<String> productName;
+  final Value<double> unitCost;
   const InvoiceItemsCompanion({
     this.id = const Value.absent(),
     this.invoiceId = const Value.absent(),
@@ -1661,6 +1695,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
     this.unitPrice = const Value.absent(),
     this.lineTotal = const Value.absent(),
     this.productName = const Value.absent(),
+    this.unitCost = const Value.absent(),
   });
   InvoiceItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -1670,6 +1705,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
     required double unitPrice,
     required double lineTotal,
     this.productName = const Value.absent(),
+    this.unitCost = const Value.absent(),
   })  : invoiceId = Value(invoiceId),
         productId = Value(productId),
         qty = Value(qty),
@@ -1683,6 +1719,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
     Expression<double>? unitPrice,
     Expression<double>? lineTotal,
     Expression<String>? productName,
+    Expression<double>? unitCost,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1692,6 +1729,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
       if (unitPrice != null) 'unit_price': unitPrice,
       if (lineTotal != null) 'line_total': lineTotal,
       if (productName != null) 'product_name': productName,
+      if (unitCost != null) 'unit_cost': unitCost,
     });
   }
 
@@ -1702,7 +1740,8 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
       Value<int>? qty,
       Value<double>? unitPrice,
       Value<double>? lineTotal,
-      Value<String>? productName}) {
+      Value<String>? productName,
+      Value<double>? unitCost}) {
     return InvoiceItemsCompanion(
       id: id ?? this.id,
       invoiceId: invoiceId ?? this.invoiceId,
@@ -1711,6 +1750,7 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
       unitPrice: unitPrice ?? this.unitPrice,
       lineTotal: lineTotal ?? this.lineTotal,
       productName: productName ?? this.productName,
+      unitCost: unitCost ?? this.unitCost,
     );
   }
 
@@ -1738,6 +1778,9 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
     if (productName.present) {
       map['product_name'] = Variable<String>(productName.value);
     }
+    if (unitCost.present) {
+      map['unit_cost'] = Variable<double>(unitCost.value);
+    }
     return map;
   }
 
@@ -1750,7 +1793,8 @@ class InvoiceItemsCompanion extends UpdateCompanion<InvoiceItem> {
           ..write('qty: $qty, ')
           ..write('unitPrice: $unitPrice, ')
           ..write('lineTotal: $lineTotal, ')
-          ..write('productName: $productName')
+          ..write('productName: $productName, ')
+          ..write('unitCost: $unitCost')
           ..write(')'))
         .toString();
   }
@@ -2710,6 +2754,799 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $ReturnsTable extends Returns with TableInfo<$ReturnsTable, Return> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReturnsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _returnNumberMeta =
+      const VerificationMeta('returnNumber');
+  @override
+  late final GeneratedColumn<String> returnNumber = GeneratedColumn<String>(
+      'return_number', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _invoiceIdMeta =
+      const VerificationMeta('invoiceId');
+  @override
+  late final GeneratedColumn<int> invoiceId = GeneratedColumn<int>(
+      'invoice_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+      'reason', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _totalMeta = const VerificationMeta('total');
+  @override
+  late final GeneratedColumn<double> total = GeneratedColumn<double>(
+      'total', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _cashierMeta =
+      const VerificationMeta('cashier');
+  @override
+  late final GeneratedColumn<String> cashier = GeneratedColumn<String>(
+      'cashier', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('كاشير'));
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, returnNumber, invoiceId, createdAt, reason, total, cashier];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'returns';
+  @override
+  VerificationContext validateIntegrity(Insertable<Return> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('return_number')) {
+      context.handle(
+          _returnNumberMeta,
+          returnNumber.isAcceptableOrUnknown(
+              data['return_number']!, _returnNumberMeta));
+    } else if (isInserting) {
+      context.missing(_returnNumberMeta);
+    }
+    if (data.containsKey('invoice_id')) {
+      context.handle(_invoiceIdMeta,
+          invoiceId.isAcceptableOrUnknown(data['invoice_id']!, _invoiceIdMeta));
+    } else if (isInserting) {
+      context.missing(_invoiceIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('reason')) {
+      context.handle(_reasonMeta,
+          reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta));
+    }
+    if (data.containsKey('total')) {
+      context.handle(
+          _totalMeta, total.isAcceptableOrUnknown(data['total']!, _totalMeta));
+    } else if (isInserting) {
+      context.missing(_totalMeta);
+    }
+    if (data.containsKey('cashier')) {
+      context.handle(_cashierMeta,
+          cashier.isAcceptableOrUnknown(data['cashier']!, _cashierMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Return map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Return(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      returnNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}return_number'])!,
+      invoiceId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}invoice_id'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      reason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}reason'])!,
+      total: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}total'])!,
+      cashier: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}cashier'])!,
+    );
+  }
+
+  @override
+  $ReturnsTable createAlias(String alias) {
+    return $ReturnsTable(attachedDatabase, alias);
+  }
+}
+
+class Return extends DataClass implements Insertable<Return> {
+  final int id;
+  final String returnNumber;
+  final int invoiceId;
+  final DateTime createdAt;
+  final String reason;
+  final double total;
+  final String cashier;
+  const Return(
+      {required this.id,
+      required this.returnNumber,
+      required this.invoiceId,
+      required this.createdAt,
+      required this.reason,
+      required this.total,
+      required this.cashier});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['return_number'] = Variable<String>(returnNumber);
+    map['invoice_id'] = Variable<int>(invoiceId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['reason'] = Variable<String>(reason);
+    map['total'] = Variable<double>(total);
+    map['cashier'] = Variable<String>(cashier);
+    return map;
+  }
+
+  ReturnsCompanion toCompanion(bool nullToAbsent) {
+    return ReturnsCompanion(
+      id: Value(id),
+      returnNumber: Value(returnNumber),
+      invoiceId: Value(invoiceId),
+      createdAt: Value(createdAt),
+      reason: Value(reason),
+      total: Value(total),
+      cashier: Value(cashier),
+    );
+  }
+
+  factory Return.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Return(
+      id: serializer.fromJson<int>(json['id']),
+      returnNumber: serializer.fromJson<String>(json['returnNumber']),
+      invoiceId: serializer.fromJson<int>(json['invoiceId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      reason: serializer.fromJson<String>(json['reason']),
+      total: serializer.fromJson<double>(json['total']),
+      cashier: serializer.fromJson<String>(json['cashier']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'returnNumber': serializer.toJson<String>(returnNumber),
+      'invoiceId': serializer.toJson<int>(invoiceId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'reason': serializer.toJson<String>(reason),
+      'total': serializer.toJson<double>(total),
+      'cashier': serializer.toJson<String>(cashier),
+    };
+  }
+
+  Return copyWith(
+          {int? id,
+          String? returnNumber,
+          int? invoiceId,
+          DateTime? createdAt,
+          String? reason,
+          double? total,
+          String? cashier}) =>
+      Return(
+        id: id ?? this.id,
+        returnNumber: returnNumber ?? this.returnNumber,
+        invoiceId: invoiceId ?? this.invoiceId,
+        createdAt: createdAt ?? this.createdAt,
+        reason: reason ?? this.reason,
+        total: total ?? this.total,
+        cashier: cashier ?? this.cashier,
+      );
+  Return copyWithCompanion(ReturnsCompanion data) {
+    return Return(
+      id: data.id.present ? data.id.value : this.id,
+      returnNumber: data.returnNumber.present
+          ? data.returnNumber.value
+          : this.returnNumber,
+      invoiceId: data.invoiceId.present ? data.invoiceId.value : this.invoiceId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      total: data.total.present ? data.total.value : this.total,
+      cashier: data.cashier.present ? data.cashier.value : this.cashier,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Return(')
+          ..write('id: $id, ')
+          ..write('returnNumber: $returnNumber, ')
+          ..write('invoiceId: $invoiceId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('reason: $reason, ')
+          ..write('total: $total, ')
+          ..write('cashier: $cashier')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, returnNumber, invoiceId, createdAt, reason, total, cashier);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Return &&
+          other.id == this.id &&
+          other.returnNumber == this.returnNumber &&
+          other.invoiceId == this.invoiceId &&
+          other.createdAt == this.createdAt &&
+          other.reason == this.reason &&
+          other.total == this.total &&
+          other.cashier == this.cashier);
+}
+
+class ReturnsCompanion extends UpdateCompanion<Return> {
+  final Value<int> id;
+  final Value<String> returnNumber;
+  final Value<int> invoiceId;
+  final Value<DateTime> createdAt;
+  final Value<String> reason;
+  final Value<double> total;
+  final Value<String> cashier;
+  const ReturnsCompanion({
+    this.id = const Value.absent(),
+    this.returnNumber = const Value.absent(),
+    this.invoiceId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.total = const Value.absent(),
+    this.cashier = const Value.absent(),
+  });
+  ReturnsCompanion.insert({
+    this.id = const Value.absent(),
+    required String returnNumber,
+    required int invoiceId,
+    this.createdAt = const Value.absent(),
+    this.reason = const Value.absent(),
+    required double total,
+    this.cashier = const Value.absent(),
+  })  : returnNumber = Value(returnNumber),
+        invoiceId = Value(invoiceId),
+        total = Value(total);
+  static Insertable<Return> custom({
+    Expression<int>? id,
+    Expression<String>? returnNumber,
+    Expression<int>? invoiceId,
+    Expression<DateTime>? createdAt,
+    Expression<String>? reason,
+    Expression<double>? total,
+    Expression<String>? cashier,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (returnNumber != null) 'return_number': returnNumber,
+      if (invoiceId != null) 'invoice_id': invoiceId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (reason != null) 'reason': reason,
+      if (total != null) 'total': total,
+      if (cashier != null) 'cashier': cashier,
+    });
+  }
+
+  ReturnsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? returnNumber,
+      Value<int>? invoiceId,
+      Value<DateTime>? createdAt,
+      Value<String>? reason,
+      Value<double>? total,
+      Value<String>? cashier}) {
+    return ReturnsCompanion(
+      id: id ?? this.id,
+      returnNumber: returnNumber ?? this.returnNumber,
+      invoiceId: invoiceId ?? this.invoiceId,
+      createdAt: createdAt ?? this.createdAt,
+      reason: reason ?? this.reason,
+      total: total ?? this.total,
+      cashier: cashier ?? this.cashier,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (returnNumber.present) {
+      map['return_number'] = Variable<String>(returnNumber.value);
+    }
+    if (invoiceId.present) {
+      map['invoice_id'] = Variable<int>(invoiceId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (total.present) {
+      map['total'] = Variable<double>(total.value);
+    }
+    if (cashier.present) {
+      map['cashier'] = Variable<String>(cashier.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReturnsCompanion(')
+          ..write('id: $id, ')
+          ..write('returnNumber: $returnNumber, ')
+          ..write('invoiceId: $invoiceId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('reason: $reason, ')
+          ..write('total: $total, ')
+          ..write('cashier: $cashier')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ReturnItemsTable extends ReturnItems
+    with TableInfo<$ReturnItemsTable, ReturnItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReturnItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _returnIdMeta =
+      const VerificationMeta('returnId');
+  @override
+  late final GeneratedColumn<int> returnId = GeneratedColumn<int>(
+      'return_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _qtyMeta = const VerificationMeta('qty');
+  @override
+  late final GeneratedColumn<int> qty = GeneratedColumn<int>(
+      'qty', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _unitPriceMeta =
+      const VerificationMeta('unitPrice');
+  @override
+  late final GeneratedColumn<double> unitPrice = GeneratedColumn<double>(
+      'unit_price', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _unitCostMeta =
+      const VerificationMeta('unitCost');
+  @override
+  late final GeneratedColumn<double> unitCost = GeneratedColumn<double>(
+      'unit_cost', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lineTotalMeta =
+      const VerificationMeta('lineTotal');
+  @override
+  late final GeneratedColumn<double> lineTotal = GeneratedColumn<double>(
+      'line_total', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _productNameMeta =
+      const VerificationMeta('productName');
+  @override
+  late final GeneratedColumn<String> productName = GeneratedColumn<String>(
+      'product_name', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        returnId,
+        productId,
+        qty,
+        unitPrice,
+        unitCost,
+        lineTotal,
+        productName
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'return_items';
+  @override
+  VerificationContext validateIntegrity(Insertable<ReturnItem> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('return_id')) {
+      context.handle(_returnIdMeta,
+          returnId.isAcceptableOrUnknown(data['return_id']!, _returnIdMeta));
+    } else if (isInserting) {
+      context.missing(_returnIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('qty')) {
+      context.handle(
+          _qtyMeta, qty.isAcceptableOrUnknown(data['qty']!, _qtyMeta));
+    } else if (isInserting) {
+      context.missing(_qtyMeta);
+    }
+    if (data.containsKey('unit_price')) {
+      context.handle(_unitPriceMeta,
+          unitPrice.isAcceptableOrUnknown(data['unit_price']!, _unitPriceMeta));
+    } else if (isInserting) {
+      context.missing(_unitPriceMeta);
+    }
+    if (data.containsKey('unit_cost')) {
+      context.handle(_unitCostMeta,
+          unitCost.isAcceptableOrUnknown(data['unit_cost']!, _unitCostMeta));
+    }
+    if (data.containsKey('line_total')) {
+      context.handle(_lineTotalMeta,
+          lineTotal.isAcceptableOrUnknown(data['line_total']!, _lineTotalMeta));
+    } else if (isInserting) {
+      context.missing(_lineTotalMeta);
+    }
+    if (data.containsKey('product_name')) {
+      context.handle(
+          _productNameMeta,
+          productName.isAcceptableOrUnknown(
+              data['product_name']!, _productNameMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ReturnItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReturnItem(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      returnId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}return_id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}product_id'])!,
+      qty: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}qty'])!,
+      unitPrice: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}unit_price'])!,
+      unitCost: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}unit_cost'])!,
+      lineTotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}line_total'])!,
+      productName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_name'])!,
+    );
+  }
+
+  @override
+  $ReturnItemsTable createAlias(String alias) {
+    return $ReturnItemsTable(attachedDatabase, alias);
+  }
+}
+
+class ReturnItem extends DataClass implements Insertable<ReturnItem> {
+  final int id;
+  final int returnId;
+  final int productId;
+  final int qty;
+  final double unitPrice;
+  final double unitCost;
+  final double lineTotal;
+  final String productName;
+  const ReturnItem(
+      {required this.id,
+      required this.returnId,
+      required this.productId,
+      required this.qty,
+      required this.unitPrice,
+      required this.unitCost,
+      required this.lineTotal,
+      required this.productName});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['return_id'] = Variable<int>(returnId);
+    map['product_id'] = Variable<int>(productId);
+    map['qty'] = Variable<int>(qty);
+    map['unit_price'] = Variable<double>(unitPrice);
+    map['unit_cost'] = Variable<double>(unitCost);
+    map['line_total'] = Variable<double>(lineTotal);
+    map['product_name'] = Variable<String>(productName);
+    return map;
+  }
+
+  ReturnItemsCompanion toCompanion(bool nullToAbsent) {
+    return ReturnItemsCompanion(
+      id: Value(id),
+      returnId: Value(returnId),
+      productId: Value(productId),
+      qty: Value(qty),
+      unitPrice: Value(unitPrice),
+      unitCost: Value(unitCost),
+      lineTotal: Value(lineTotal),
+      productName: Value(productName),
+    );
+  }
+
+  factory ReturnItem.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReturnItem(
+      id: serializer.fromJson<int>(json['id']),
+      returnId: serializer.fromJson<int>(json['returnId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      qty: serializer.fromJson<int>(json['qty']),
+      unitPrice: serializer.fromJson<double>(json['unitPrice']),
+      unitCost: serializer.fromJson<double>(json['unitCost']),
+      lineTotal: serializer.fromJson<double>(json['lineTotal']),
+      productName: serializer.fromJson<String>(json['productName']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'returnId': serializer.toJson<int>(returnId),
+      'productId': serializer.toJson<int>(productId),
+      'qty': serializer.toJson<int>(qty),
+      'unitPrice': serializer.toJson<double>(unitPrice),
+      'unitCost': serializer.toJson<double>(unitCost),
+      'lineTotal': serializer.toJson<double>(lineTotal),
+      'productName': serializer.toJson<String>(productName),
+    };
+  }
+
+  ReturnItem copyWith(
+          {int? id,
+          int? returnId,
+          int? productId,
+          int? qty,
+          double? unitPrice,
+          double? unitCost,
+          double? lineTotal,
+          String? productName}) =>
+      ReturnItem(
+        id: id ?? this.id,
+        returnId: returnId ?? this.returnId,
+        productId: productId ?? this.productId,
+        qty: qty ?? this.qty,
+        unitPrice: unitPrice ?? this.unitPrice,
+        unitCost: unitCost ?? this.unitCost,
+        lineTotal: lineTotal ?? this.lineTotal,
+        productName: productName ?? this.productName,
+      );
+  ReturnItem copyWithCompanion(ReturnItemsCompanion data) {
+    return ReturnItem(
+      id: data.id.present ? data.id.value : this.id,
+      returnId: data.returnId.present ? data.returnId.value : this.returnId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      qty: data.qty.present ? data.qty.value : this.qty,
+      unitPrice: data.unitPrice.present ? data.unitPrice.value : this.unitPrice,
+      unitCost: data.unitCost.present ? data.unitCost.value : this.unitCost,
+      lineTotal: data.lineTotal.present ? data.lineTotal.value : this.lineTotal,
+      productName:
+          data.productName.present ? data.productName.value : this.productName,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReturnItem(')
+          ..write('id: $id, ')
+          ..write('returnId: $returnId, ')
+          ..write('productId: $productId, ')
+          ..write('qty: $qty, ')
+          ..write('unitPrice: $unitPrice, ')
+          ..write('unitCost: $unitCost, ')
+          ..write('lineTotal: $lineTotal, ')
+          ..write('productName: $productName')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, returnId, productId, qty, unitPrice,
+      unitCost, lineTotal, productName);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReturnItem &&
+          other.id == this.id &&
+          other.returnId == this.returnId &&
+          other.productId == this.productId &&
+          other.qty == this.qty &&
+          other.unitPrice == this.unitPrice &&
+          other.unitCost == this.unitCost &&
+          other.lineTotal == this.lineTotal &&
+          other.productName == this.productName);
+}
+
+class ReturnItemsCompanion extends UpdateCompanion<ReturnItem> {
+  final Value<int> id;
+  final Value<int> returnId;
+  final Value<int> productId;
+  final Value<int> qty;
+  final Value<double> unitPrice;
+  final Value<double> unitCost;
+  final Value<double> lineTotal;
+  final Value<String> productName;
+  const ReturnItemsCompanion({
+    this.id = const Value.absent(),
+    this.returnId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.qty = const Value.absent(),
+    this.unitPrice = const Value.absent(),
+    this.unitCost = const Value.absent(),
+    this.lineTotal = const Value.absent(),
+    this.productName = const Value.absent(),
+  });
+  ReturnItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required int returnId,
+    required int productId,
+    required int qty,
+    required double unitPrice,
+    this.unitCost = const Value.absent(),
+    required double lineTotal,
+    this.productName = const Value.absent(),
+  })  : returnId = Value(returnId),
+        productId = Value(productId),
+        qty = Value(qty),
+        unitPrice = Value(unitPrice),
+        lineTotal = Value(lineTotal);
+  static Insertable<ReturnItem> custom({
+    Expression<int>? id,
+    Expression<int>? returnId,
+    Expression<int>? productId,
+    Expression<int>? qty,
+    Expression<double>? unitPrice,
+    Expression<double>? unitCost,
+    Expression<double>? lineTotal,
+    Expression<String>? productName,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (returnId != null) 'return_id': returnId,
+      if (productId != null) 'product_id': productId,
+      if (qty != null) 'qty': qty,
+      if (unitPrice != null) 'unit_price': unitPrice,
+      if (unitCost != null) 'unit_cost': unitCost,
+      if (lineTotal != null) 'line_total': lineTotal,
+      if (productName != null) 'product_name': productName,
+    });
+  }
+
+  ReturnItemsCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? returnId,
+      Value<int>? productId,
+      Value<int>? qty,
+      Value<double>? unitPrice,
+      Value<double>? unitCost,
+      Value<double>? lineTotal,
+      Value<String>? productName}) {
+    return ReturnItemsCompanion(
+      id: id ?? this.id,
+      returnId: returnId ?? this.returnId,
+      productId: productId ?? this.productId,
+      qty: qty ?? this.qty,
+      unitPrice: unitPrice ?? this.unitPrice,
+      unitCost: unitCost ?? this.unitCost,
+      lineTotal: lineTotal ?? this.lineTotal,
+      productName: productName ?? this.productName,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (returnId.present) {
+      map['return_id'] = Variable<int>(returnId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (qty.present) {
+      map['qty'] = Variable<int>(qty.value);
+    }
+    if (unitPrice.present) {
+      map['unit_price'] = Variable<double>(unitPrice.value);
+    }
+    if (unitCost.present) {
+      map['unit_cost'] = Variable<double>(unitCost.value);
+    }
+    if (lineTotal.present) {
+      map['line_total'] = Variable<double>(lineTotal.value);
+    }
+    if (productName.present) {
+      map['product_name'] = Variable<String>(productName.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReturnItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('returnId: $returnId, ')
+          ..write('productId: $productId, ')
+          ..write('qty: $qty, ')
+          ..write('unitPrice: $unitPrice, ')
+          ..write('unitCost: $unitCost, ')
+          ..write('lineTotal: $lineTotal, ')
+          ..write('productName: $productName')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2721,6 +3558,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PurchaseOrderItemsTable purchaseOrderItems =
       $PurchaseOrderItemsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $ReturnsTable returns = $ReturnsTable(this);
+  late final $ReturnItemsTable returnItems = $ReturnItemsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2732,7 +3571,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         invoiceItems,
         purchaseOrders,
         purchaseOrderItems,
-        settings
+        settings,
+        returns,
+        returnItems
       ];
 }
 
@@ -3404,6 +4245,7 @@ typedef $$InvoiceItemsTableCreateCompanionBuilder = InvoiceItemsCompanion
   required double unitPrice,
   required double lineTotal,
   Value<String> productName,
+  Value<double> unitCost,
 });
 typedef $$InvoiceItemsTableUpdateCompanionBuilder = InvoiceItemsCompanion
     Function({
@@ -3414,6 +4256,7 @@ typedef $$InvoiceItemsTableUpdateCompanionBuilder = InvoiceItemsCompanion
   Value<double> unitPrice,
   Value<double> lineTotal,
   Value<String> productName,
+  Value<double> unitCost,
 });
 
 class $$InvoiceItemsTableFilterComposer
@@ -3445,6 +4288,9 @@ class $$InvoiceItemsTableFilterComposer
 
   ColumnFilters<String> get productName => $composableBuilder(
       column: $table.productName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get unitCost => $composableBuilder(
+      column: $table.unitCost, builder: (column) => ColumnFilters(column));
 }
 
 class $$InvoiceItemsTableOrderingComposer
@@ -3476,6 +4322,9 @@ class $$InvoiceItemsTableOrderingComposer
 
   ColumnOrderings<String> get productName => $composableBuilder(
       column: $table.productName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get unitCost => $composableBuilder(
+      column: $table.unitCost, builder: (column) => ColumnOrderings(column));
 }
 
 class $$InvoiceItemsTableAnnotationComposer
@@ -3507,6 +4356,9 @@ class $$InvoiceItemsTableAnnotationComposer
 
   GeneratedColumn<String> get productName => $composableBuilder(
       column: $table.productName, builder: (column) => column);
+
+  GeneratedColumn<double> get unitCost =>
+      $composableBuilder(column: $table.unitCost, builder: (column) => column);
 }
 
 class $$InvoiceItemsTableTableManager extends RootTableManager<
@@ -3542,6 +4394,7 @@ class $$InvoiceItemsTableTableManager extends RootTableManager<
             Value<double> unitPrice = const Value.absent(),
             Value<double> lineTotal = const Value.absent(),
             Value<String> productName = const Value.absent(),
+            Value<double> unitCost = const Value.absent(),
           }) =>
               InvoiceItemsCompanion(
             id: id,
@@ -3551,6 +4404,7 @@ class $$InvoiceItemsTableTableManager extends RootTableManager<
             unitPrice: unitPrice,
             lineTotal: lineTotal,
             productName: productName,
+            unitCost: unitCost,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -3560,6 +4414,7 @@ class $$InvoiceItemsTableTableManager extends RootTableManager<
             required double unitPrice,
             required double lineTotal,
             Value<String> productName = const Value.absent(),
+            Value<double> unitCost = const Value.absent(),
           }) =>
               InvoiceItemsCompanion.insert(
             id: id,
@@ -3569,6 +4424,7 @@ class $$InvoiceItemsTableTableManager extends RootTableManager<
             unitPrice: unitPrice,
             lineTotal: lineTotal,
             productName: productName,
+            unitCost: unitCost,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -4111,6 +4967,402 @@ typedef $$SettingsTableProcessedTableManager = ProcessedTableManager<
     (Setting, BaseReferences<_$AppDatabase, $SettingsTable, Setting>),
     Setting,
     PrefetchHooks Function()>;
+typedef $$ReturnsTableCreateCompanionBuilder = ReturnsCompanion Function({
+  Value<int> id,
+  required String returnNumber,
+  required int invoiceId,
+  Value<DateTime> createdAt,
+  Value<String> reason,
+  required double total,
+  Value<String> cashier,
+});
+typedef $$ReturnsTableUpdateCompanionBuilder = ReturnsCompanion Function({
+  Value<int> id,
+  Value<String> returnNumber,
+  Value<int> invoiceId,
+  Value<DateTime> createdAt,
+  Value<String> reason,
+  Value<double> total,
+  Value<String> cashier,
+});
+
+class $$ReturnsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReturnsTable> {
+  $$ReturnsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get returnNumber => $composableBuilder(
+      column: $table.returnNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get invoiceId => $composableBuilder(
+      column: $table.invoiceId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get reason => $composableBuilder(
+      column: $table.reason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get total => $composableBuilder(
+      column: $table.total, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get cashier => $composableBuilder(
+      column: $table.cashier, builder: (column) => ColumnFilters(column));
+}
+
+class $$ReturnsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReturnsTable> {
+  $$ReturnsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get returnNumber => $composableBuilder(
+      column: $table.returnNumber,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get invoiceId => $composableBuilder(
+      column: $table.invoiceId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+      column: $table.reason, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get total => $composableBuilder(
+      column: $table.total, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get cashier => $composableBuilder(
+      column: $table.cashier, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ReturnsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReturnsTable> {
+  $$ReturnsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get returnNumber => $composableBuilder(
+      column: $table.returnNumber, builder: (column) => column);
+
+  GeneratedColumn<int> get invoiceId =>
+      $composableBuilder(column: $table.invoiceId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<double> get total =>
+      $composableBuilder(column: $table.total, builder: (column) => column);
+
+  GeneratedColumn<String> get cashier =>
+      $composableBuilder(column: $table.cashier, builder: (column) => column);
+}
+
+class $$ReturnsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ReturnsTable,
+    Return,
+    $$ReturnsTableFilterComposer,
+    $$ReturnsTableOrderingComposer,
+    $$ReturnsTableAnnotationComposer,
+    $$ReturnsTableCreateCompanionBuilder,
+    $$ReturnsTableUpdateCompanionBuilder,
+    (Return, BaseReferences<_$AppDatabase, $ReturnsTable, Return>),
+    Return,
+    PrefetchHooks Function()> {
+  $$ReturnsTableTableManager(_$AppDatabase db, $ReturnsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReturnsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReturnsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReturnsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> returnNumber = const Value.absent(),
+            Value<int> invoiceId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<String> reason = const Value.absent(),
+            Value<double> total = const Value.absent(),
+            Value<String> cashier = const Value.absent(),
+          }) =>
+              ReturnsCompanion(
+            id: id,
+            returnNumber: returnNumber,
+            invoiceId: invoiceId,
+            createdAt: createdAt,
+            reason: reason,
+            total: total,
+            cashier: cashier,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String returnNumber,
+            required int invoiceId,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<String> reason = const Value.absent(),
+            required double total,
+            Value<String> cashier = const Value.absent(),
+          }) =>
+              ReturnsCompanion.insert(
+            id: id,
+            returnNumber: returnNumber,
+            invoiceId: invoiceId,
+            createdAt: createdAt,
+            reason: reason,
+            total: total,
+            cashier: cashier,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ReturnsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ReturnsTable,
+    Return,
+    $$ReturnsTableFilterComposer,
+    $$ReturnsTableOrderingComposer,
+    $$ReturnsTableAnnotationComposer,
+    $$ReturnsTableCreateCompanionBuilder,
+    $$ReturnsTableUpdateCompanionBuilder,
+    (Return, BaseReferences<_$AppDatabase, $ReturnsTable, Return>),
+    Return,
+    PrefetchHooks Function()>;
+typedef $$ReturnItemsTableCreateCompanionBuilder = ReturnItemsCompanion
+    Function({
+  Value<int> id,
+  required int returnId,
+  required int productId,
+  required int qty,
+  required double unitPrice,
+  Value<double> unitCost,
+  required double lineTotal,
+  Value<String> productName,
+});
+typedef $$ReturnItemsTableUpdateCompanionBuilder = ReturnItemsCompanion
+    Function({
+  Value<int> id,
+  Value<int> returnId,
+  Value<int> productId,
+  Value<int> qty,
+  Value<double> unitPrice,
+  Value<double> unitCost,
+  Value<double> lineTotal,
+  Value<String> productName,
+});
+
+class $$ReturnItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $ReturnItemsTable> {
+  $$ReturnItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get returnId => $composableBuilder(
+      column: $table.returnId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get unitPrice => $composableBuilder(
+      column: $table.unitPrice, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get unitCost => $composableBuilder(
+      column: $table.unitCost, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get lineTotal => $composableBuilder(
+      column: $table.lineTotal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => ColumnFilters(column));
+}
+
+class $$ReturnItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReturnItemsTable> {
+  $$ReturnItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get returnId => $composableBuilder(
+      column: $table.returnId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get qty => $composableBuilder(
+      column: $table.qty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get unitPrice => $composableBuilder(
+      column: $table.unitPrice, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get unitCost => $composableBuilder(
+      column: $table.unitCost, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get lineTotal => $composableBuilder(
+      column: $table.lineTotal, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ReturnItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReturnItemsTable> {
+  $$ReturnItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get returnId =>
+      $composableBuilder(column: $table.returnId, builder: (column) => column);
+
+  GeneratedColumn<int> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<int> get qty =>
+      $composableBuilder(column: $table.qty, builder: (column) => column);
+
+  GeneratedColumn<double> get unitPrice =>
+      $composableBuilder(column: $table.unitPrice, builder: (column) => column);
+
+  GeneratedColumn<double> get unitCost =>
+      $composableBuilder(column: $table.unitCost, builder: (column) => column);
+
+  GeneratedColumn<double> get lineTotal =>
+      $composableBuilder(column: $table.lineTotal, builder: (column) => column);
+
+  GeneratedColumn<String> get productName => $composableBuilder(
+      column: $table.productName, builder: (column) => column);
+}
+
+class $$ReturnItemsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ReturnItemsTable,
+    ReturnItem,
+    $$ReturnItemsTableFilterComposer,
+    $$ReturnItemsTableOrderingComposer,
+    $$ReturnItemsTableAnnotationComposer,
+    $$ReturnItemsTableCreateCompanionBuilder,
+    $$ReturnItemsTableUpdateCompanionBuilder,
+    (ReturnItem, BaseReferences<_$AppDatabase, $ReturnItemsTable, ReturnItem>),
+    ReturnItem,
+    PrefetchHooks Function()> {
+  $$ReturnItemsTableTableManager(_$AppDatabase db, $ReturnItemsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReturnItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ReturnItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ReturnItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> returnId = const Value.absent(),
+            Value<int> productId = const Value.absent(),
+            Value<int> qty = const Value.absent(),
+            Value<double> unitPrice = const Value.absent(),
+            Value<double> unitCost = const Value.absent(),
+            Value<double> lineTotal = const Value.absent(),
+            Value<String> productName = const Value.absent(),
+          }) =>
+              ReturnItemsCompanion(
+            id: id,
+            returnId: returnId,
+            productId: productId,
+            qty: qty,
+            unitPrice: unitPrice,
+            unitCost: unitCost,
+            lineTotal: lineTotal,
+            productName: productName,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int returnId,
+            required int productId,
+            required int qty,
+            required double unitPrice,
+            Value<double> unitCost = const Value.absent(),
+            required double lineTotal,
+            Value<String> productName = const Value.absent(),
+          }) =>
+              ReturnItemsCompanion.insert(
+            id: id,
+            returnId: returnId,
+            productId: productId,
+            qty: qty,
+            unitPrice: unitPrice,
+            unitCost: unitCost,
+            lineTotal: lineTotal,
+            productName: productName,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ReturnItemsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ReturnItemsTable,
+    ReturnItem,
+    $$ReturnItemsTableFilterComposer,
+    $$ReturnItemsTableOrderingComposer,
+    $$ReturnItemsTableAnnotationComposer,
+    $$ReturnItemsTableCreateCompanionBuilder,
+    $$ReturnItemsTableUpdateCompanionBuilder,
+    (ReturnItem, BaseReferences<_$AppDatabase, $ReturnItemsTable, ReturnItem>),
+    ReturnItem,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4129,4 +5381,8 @@ class $AppDatabaseManager {
       $$PurchaseOrderItemsTableTableManager(_db, _db.purchaseOrderItems);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$ReturnsTableTableManager get returns =>
+      $$ReturnsTableTableManager(_db, _db.returns);
+  $$ReturnItemsTableTableManager get returnItems =>
+      $$ReturnItemsTableTableManager(_db, _db.returnItems);
 }

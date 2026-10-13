@@ -14,6 +14,12 @@ class ClosingSummaryData {
   final int itemsSold;
   final List<({String name, int qty, double total})> top;
 
+  /// نطاق التقرير (اليوم / تاريخ / من…إلى / كل السجل).
+  final String scopeLabel;
+
+  /// إجمالي المردودات في النطاق (0 = لا سطر إضافي).
+  final double returnsTotal;
+
   const ClosingSummaryData({
     required this.invoiceCount,
     required this.gross,
@@ -23,7 +29,11 @@ class ClosingSummaryData {
     required this.change,
     required this.itemsSold,
     this.top = const [],
+    this.scopeLabel = 'اليوم',
+    this.returnsTotal = 0,
   });
+
+  double get netAfterReturns => net - returnsTotal;
 }
 
 class PdfClosingBuilder {
@@ -105,7 +115,7 @@ class PdfClosingBuilder {
                 pw.SizedBox(height: 2),
                 pw.Center(
                   child: pw.Text(
-                    'تقرير إغلاق اليوم — ${date.year}/${date.month}/${date.day}',
+                    'تقرير الإغلاق — ${summary.scopeLabel}',
                     style: pw.TextStyle(font: bold, fontSize: 11),
                   ),
                 ),
@@ -119,6 +129,17 @@ class PdfClosingBuilder {
                   money(summary.net < 0 ? 0 : summary.net),
                   big: true,
                 ),
+                if (summary.returnsTotal > 0) ...[
+                  row(
+                    'المرتجعات:',
+                    '-${money(summary.returnsTotal)}',
+                  ),
+                  row(
+                    'الصافي بعد المرتجعات:',
+                    money(summary.netAfterReturns),
+                    big: true,
+                  ),
+                ],
                 row('المدفوع:', money(summary.paid)),
                 row('الباقي للزبائن:', money(summary.change)),
                 if (summary.top.isNotEmpty) ...[

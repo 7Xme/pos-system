@@ -293,7 +293,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.summarize_outlined));
       await tester.pumpAndSettle();
 
-      expect(find.text('تقرير إغلاق اليوم'), findsOneWidget);
+      expect(find.text('تقرير الإغلاق — اليوم'), findsOneWidget);
       expect(find.textContaining('الصافي'), findsWidgets);
       expect(find.textContaining('150.00'), findsWidgets);
     });

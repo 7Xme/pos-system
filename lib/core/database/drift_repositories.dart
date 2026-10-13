@@ -60,7 +60,9 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
   }) async {
     final subtotal = cart.fold<double>(0, (s, e) => s + e.total);
     final total = applyDiscount(subtotal, discount, discountType);
-    // تحقق صارم من المخزون الحالي قبل الحفظ (يمنع البيع السالب)
+    // تحقق صارم من المخزون الحالي قبل الحفظ (يمنع البيع السالب)،
+    // مع التقاط التكلفة الحالية للقطة الربحية (v4).
+    final costs = <int, double>{};
     for (final l in cart) {
       final prod = await db.getProduct(l.product.id);
       if (prod == null || prod.stockQty < l.qty) {
@@ -69,6 +71,7 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
           '(المطلوب ${l.qty})',
         );
       }
+      costs[l.product.id] = prod.cost;
     }
     final now = DateTime.now();
     var attempt = 0;
@@ -85,6 +88,7 @@ class DriftCheckoutRepository implements PosCheckoutRepository {
           unitPrice: Value(l.product.price),
           lineTotal: Value(l.total),
           productName: Value(l.product.name),
+          unitCost: Value(costs[l.product.id] ?? 0),
         ),
     ];
     await db.saveInvoiceWithItems(
