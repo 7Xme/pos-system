@@ -9,6 +9,8 @@ import '../../../core/database/app_database.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
 import '../../../core/printing/pdf_closing.dart';
+import '../../inventory/bloc/inventory_bloc.dart';
+import '../../pos/bloc/pos_bloc.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/sales_bloc.dart';
 
@@ -77,12 +79,15 @@ class _SalesScreenState extends State<SalesScreen> {
     }
     final ctx = await _printContext();
     if (!mounted) return;
-    final paperSize = context.read<SettingsCubit>().state.paperSize;
+    final settings = context.read<SettingsCubit>().state;
+    final paperSize = settings.paperSize;
     await A4PrintService.printInvoice(
       shopName: ctx.shop,
       invoiceNumber: inv.invoiceNumber,
       date: inv.createdAt,
       pageFormat: A4PrintService.paperFormatOf(paperSize),
+      direct: settings.directPrint,
+      printerName: settings.printerName,
       lines: [
         for (final it in items)
           InvoiceLine(
@@ -476,6 +481,11 @@ class _SalesScreenState extends State<SalesScreen> {
       if (done == true) {
         final lr = bloc.state.lastReturn;
         bloc.add(const SalesReturnNoticeShown());
+        // المخزون تغيّر: حدّث شبكة البيع وشاشة المنتجات فوراً
+        if (mounted) {
+          context.read<PosBloc>().add(PosCatalogRefreshed());
+          context.read<InventoryBloc>().add(InventoryStarted());
+        }
         if (lr != null) await _printReturn(lr);
       } else {
         bloc.add(const SalesReturnNoticeShown());
@@ -577,6 +587,8 @@ class _SalesScreenState extends State<SalesScreen> {
         currency: s.currency,
         phone: s.phone.isEmpty ? null : s.phone,
         pageFormat: A4PrintService.paperFormatOf(s.paperSize),
+        direct: s.directPrint,
+        printerName: s.printerName,
       );
     } catch (e) {
       if (!mounted) return;
@@ -843,6 +855,8 @@ class _SalesScreenState extends State<SalesScreen> {
         currency: s.currency,
         phone: s.phone.isEmpty ? null : s.phone,
         pageFormat: A4PrintService.paperFormatOf(s.paperSize),
+        direct: s.directPrint,
+        printerName: s.printerName,
       );
     } catch (e) {
       if (!mounted) return;
@@ -994,6 +1008,8 @@ class _SalesScreenState extends State<SalesScreen> {
         currency: s.currency,
         phone: s.phone.isEmpty ? null : s.phone,
         pageFormat: A4PrintService.paperFormatOf(s.paperSize),
+        direct: s.directPrint,
+        printerName: s.printerName,
       );
     } catch (e) {
       if (!mounted) return;

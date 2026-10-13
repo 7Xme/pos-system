@@ -16,6 +16,56 @@ class A4PrintService {
   static PdfPageFormat paperFormatOf(String paperSize) =>
       paperSize == 'a4' ? PdfPageFormat.a4 : PdfPageFormat.a5;
 
+  /// إرسال مستند للطباعة: مباشرةً على الطابعة المحددة بلا حوار، مع رجوع
+  /// تلقائي إلى حوار الطباعة عند غياب الطابعة أو فشل الطباعة المباشرة
+  /// (لا تُفقد أي مطبوعة).
+  static Future<void> _send({
+    required List<int> bytes,
+    required String name,
+    required PdfPageFormat format,
+    required bool direct,
+    String? printerName,
+  }) async {
+    if (direct) {
+      try {
+        final printers = await Printing.listPrinters();
+        Printer? match;
+        for (final p in printers) {
+          if (p.isDefault) {
+            match = p;
+            break;
+          }
+        }
+        if (printerName != null) {
+          match = null;
+          for (final p in printers) {
+            if (p.name == printerName) {
+              match = p;
+              break;
+            }
+          }
+        }
+        if (match != null) {
+          final done = await Printing.directPrintPdf(
+            printer: match,
+            onLayout: (_) async => Uint8List.fromList(bytes),
+            name: name,
+            format: format,
+          );
+          if (done) return;
+        }
+      } catch (_) {
+        // أي عطل هنا يرجوع إلى حوار الطباعة
+      }
+    }
+    await Printing.layoutPdf(
+      onLayout: (_) async => Uint8List.fromList(bytes),
+      name: name,
+      // يظهر هذا المقاس تلقائياً في حوار الطباعة دون تغيير يدوي.
+      format: format,
+    );
+  }
+
   /// معاينة + طباعة فاتورة
   static Future<void> printInvoice({
     required String shopName,
@@ -30,6 +80,8 @@ class A4PrintService {
     String? phone,
     List<int>? logoBytes,
     PdfPageFormat pageFormat = PdfPageFormat.a5,
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await PdfInvoiceBuilder.build(
       shopName: shopName,
@@ -45,11 +97,12 @@ class A4PrintService {
       logoBytes: logoBytes,
       pageFormat: pageFormat,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: invoiceNumber,
-      // يظهر هذا المقاس تلقائياً في حوار الطباعة (Size) دون تغيير يدوي.
       format: pageFormat,
+      direct: direct,
+      printerName: printerName,
     );
   }
 
@@ -57,14 +110,19 @@ class A4PrintService {
   static Future<void> printBarcodeSheet(
     List<({String name, String barcode, double price})> items, {
     String currency = 'درهم',
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await BarcodeLabelBuilder.buildSheet(
       items: items,
       currency: currency,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: 'barcode-labels',
+      format: PdfPageFormat.a4,
+      direct: direct,
+      printerName: printerName,
     );
   }
 
@@ -76,6 +134,8 @@ class A4PrintService {
     String currency = 'درهم',
     String? phone,
     PdfPageFormat pageFormat = PdfPageFormat.a5,
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await PdfClosingBuilder.build(
       shopName: shopName,
@@ -85,11 +145,12 @@ class A4PrintService {
       phone: phone,
       pageFormat: pageFormat,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: 'closing-${date.year}${date.month}${date.day}',
-      // يظهر هذا المقاس تلقائياً في حوار الطباعة دون تغيير يدوي.
       format: pageFormat,
+      direct: direct,
+      printerName: printerName,
     );
   }
 
@@ -107,6 +168,8 @@ class A4PrintService {
     String currency = 'درهم',
     String? phone,
     PdfPageFormat pageFormat = PdfPageFormat.a5,
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await PdfReturnBuilder.build(
       shopName: shopName,
@@ -121,11 +184,12 @@ class A4PrintService {
       phone: phone,
       pageFormat: pageFormat,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: returnNumber,
-      // يظهر هذا المقاس تلقائياً في حوار الطباعة دون تغيير يدوي.
       format: pageFormat,
+      direct: direct,
+      printerName: printerName,
     );
   }
 
@@ -142,6 +206,8 @@ class A4PrintService {
     String currency = 'درهم',
     String? phone,
     PdfPageFormat pageFormat = PdfPageFormat.a5,
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await PdfProfitBuilder.build(
       shopName: shopName,
@@ -156,11 +222,12 @@ class A4PrintService {
       phone: phone,
       pageFormat: pageFormat,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: 'profit-$scopeLabel',
-      // يظهر هذا المقاس تلقائياً في حوار الطباعة دون تغيير يدوي.
       format: pageFormat,
+      direct: direct,
+      printerName: printerName,
     );
   }
 
@@ -175,6 +242,8 @@ class A4PrintService {
     List<int>? logoBytes,
     String supplierName = '',
     String? supplierPhone,
+    bool direct = false,
+    String? printerName,
   }) async {
     final bytes = await PdfPurchaseBuilder.build(
       shopName: shopName,
@@ -187,9 +256,12 @@ class A4PrintService {
       supplierName: supplierName,
       supplierPhone: supplierPhone,
     );
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(bytes),
+    await _send(
+      bytes: bytes,
       name: poNumber,
+      format: PdfPageFormat.a4,
+      direct: direct,
+      printerName: printerName,
     );
   }
 }

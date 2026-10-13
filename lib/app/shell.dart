@@ -51,9 +51,10 @@ class _AppShellState extends State<AppShell> {
               if (BarcodeScannerService.captureEnabled) {
                 BarcodeScannerService.reset();
               }
-              // تحديث الاختصارات عند العودة للبيع (قد تتغير من المخزون)
+              // تحديث الشبكة والاختصارات عند العودة للبيع
+              // (قد يتغير المخزون من إرجاع أو استلام)
               if (i == 0) {
-                context.read<PosBloc>().add(PosFavoritesRefreshed());
+                context.read<PosBloc>().add(PosCatalogRefreshed());
               }
               // تحديث سجل المبيعات عند فتحه (قد تُحفظ فواتير جديدة)
               if (i == 4) {

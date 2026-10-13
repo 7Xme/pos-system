@@ -198,6 +198,12 @@ class PosMissingBarcodeHandled extends PosEvent {}
 
 class PosFavoritesRefreshed extends PosEvent {}
 
+/// إعادة تحميل شبكة البيع والمفضلة بنفس الاستعلام الحالي
+/// (بعد إرجاع بضاعة أو استلام شحنة — أرقام المخزون تتغير).
+class PosCatalogRefreshed extends PosEvent {
+  const PosCatalogRefreshed();
+}
+
 // ── State ─────────────────────────────────────────────────
 enum PosStatus { initial, loading, ready, checkoutSuccess, failure }
 
@@ -337,6 +343,7 @@ class PosBloc extends Bloc<PosEvent, PosState> {
     on<PosDiscountChanged>(_onDiscount);
     on<PosCheckout>(_onCheckout);
     on<PosFavoritesRefreshed>(_onFavorites);
+    on<PosCatalogRefreshed>(_onCatalogRefreshed);
     on<PosCheckoutHandled>(
       (e, emit) => emit(state.copyWith(status: PosStatus.ready)),
     );
@@ -361,6 +368,16 @@ class PosBloc extends Bloc<PosEvent, PosState> {
     Emitter<PosState> emit,
   ) async {
     emit(state.copyWith(favorites: await repo.favorites()));
+  }
+
+  Future<void> _onCatalogRefreshed(
+    PosCatalogRefreshed e,
+    Emitter<PosState> emit,
+  ) async {
+    emit(state.copyWith(
+      catalog: await repo.search(state.query),
+      favorites: await repo.favorites(),
+    ));
   }
 
   Future<void> _onQuery(

@@ -79,10 +79,30 @@ class BackupService {
 
   // ── التصدير ──────────────────────────────────────────────
 
+  /// لقطة مؤقتة متسقة من القاعدة الجارية (لا نسخ للملف الحي أثناء العمل).
+  /// تُرجع البايتات وتحذف الملف المؤقت.
+  static Future<List<int>> snapshotBytes(AppDatabase db) async {
+    final dir = await supportDir();
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    final tmp = File(p.join(dir.path, 'snapshot-$stamp.sqlite'));
+    try {
+      await db.exportSnapshot(tmp.path);
+      return await tmp.readAsBytes();
+    } finally {
+      if (await tmp.exists()) {
+        try {
+          await tmp.delete();
+        } catch (_) {
+          // تنظيف اختياري
+        }
+      }
+    }
+  }
+
   /// يفتح حوار الحفظ ويكتب ملف ZIP. يُرجع مسار الحفظ، أو null عند الإلغاء.
-  static Future<String?> exportBackup() async {
-    final db = await dbFile();
-    if (!await db.exists()) {
+  static Future<String?> exportBackup(AppDatabase db) async {
+    final hasDb = await dbFile();
+    if (!await hasDb.exists()) {
       throw StateError('لا توجد قاعدة بيانات بعد');
     }
     final imgs = await imagesDir();
@@ -94,7 +114,7 @@ class BackupService {
         }
       }
     }
-    final zip = buildZip(dbBytes: await db.readAsBytes(), images: images);
+    final zip = buildZip(dbBytes: await snapshotBytes(db), images: images);
     final now = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     final name = 'pos-backup-${now.year}${two(now.month)}${two(now.day)}-'
@@ -111,6 +131,32 @@ class BackupService {
 
   // ── الاستيراد ────────────────────────────────────────────
 
+  /// يتحقق من ملف قاعدة مُنسخ (سلامة + إصدار + جداول) ويرمي
+  /// StateError برسالة عربية عند الفشل — دون تغيير أي بيانات.
+  static Future<void> validateBackupDb(File dbFilePath) async {
+    final probe = AppDatabase.at(dbFilePath.path);
+    try {
+      await AppDatabase.validateBackupFile(probe);
+    } finally {
+      await probe.close();
+    }
+  }
+
+  /// نسخة أمان من القاعدة الحالية قبل استبدالها.
+  /// تُرجع مسار نسخة الأمان.
+  static Future<String> safetyBackup() async {
+    final src = await dbFile();
+    if (!await src.exists()) return '';
+    final dir = await supportDir();
+    final now = DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final name = 'pre-import-${now.year}${two(now.month)}${two(now.day)}-'
+        '${two(now.hour)}${two(now.minute)}${two(now.second)}.sqlite.bak';
+    final dst = File(p.join(dir.path, name));
+    await src.copy(dst.path);
+    return dst.path;
+  }
+
   /// يختار ملف ZIP ويفك ضغطه مستبدلاً قاعدة البيانات والصور.
   /// يُرجع true عند النجاح، وfalse إذا ألغى المستخدم الاختيار.
   /// مهم: تُغلق القاعدة الحالية — يجب إعادة تشغيل التطبيق بعدها.
@@ -123,7 +169,31 @@ class BackupService {
     final path = picked?.path;
     if (path == null) return false;
     final parsed = parseZip(await File(path).readAsBytes());
-    // إغلاق القاعدة أولاً لتحرير ملف SQLite قبل استبداله
+
+    // 1) تحقق من محتوى النسخة في ملف مؤقت — لا نلمس القاعدة الحالية
+    final dir = await supportDir();
+    final probePath = p.join(
+      dir.path,
+      'import-probe-${DateTime.now().millisecondsSinceEpoch}.sqlite',
+    );
+    final probeFile = File(probePath);
+    await probeFile.writeAsBytes(parsed.dbBytes, flush: true);
+    try {
+      await validateBackupDb(probeFile);
+    } finally {
+      if (await probeFile.exists()) {
+        try {
+          await probeFile.delete();
+        } catch (_) {
+          // تنظيف اختياري
+        }
+      }
+    }
+
+    // 2) نسخة أمان من البيانات الحالية قبل الاستبدال
+    await safetyBackup();
+
+    // 3) الاستبدال
     await db.close();
     final dbF = await dbFile();
     await dbF.writeAsBytes(parsed.dbBytes, flush: true);

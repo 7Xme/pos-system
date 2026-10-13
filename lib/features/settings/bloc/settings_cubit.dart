@@ -19,6 +19,12 @@ class ShopSettings extends Equatable {
   /// حجم ورق الفاتورة: 'a5' (افتراضي) أو 'a4'.
   final String paperSize;
 
+  /// طباعة مباشرة على الطابعة المحددة بلا فتح حوار الطباعة.
+  final bool directPrint;
+
+  /// اسم الطابعة المختارة للطباعة المباشرة (null = الافتراضية).
+  final String? printerName;
+
   const ShopSettings({
     this.shopName = 'مكتبة النجاح',
     this.cashier = 'كاشير',
@@ -29,6 +35,8 @@ class ShopSettings extends Equatable {
     this.autoPrint = true,
     this.ttsSource = TtsSource.auto,
     this.paperSize = 'a5',
+    this.directPrint = false,
+    this.printerName,
   });
 
   ShopSettings copyWith({
@@ -41,6 +49,8 @@ class ShopSettings extends Equatable {
     bool? autoPrint,
     TtsSource? ttsSource,
     String? paperSize,
+    bool? directPrint,
+    String? Function()? printerName,
   }) {
     return ShopSettings(
       shopName: shopName ?? this.shopName,
@@ -54,6 +64,8 @@ class ShopSettings extends Equatable {
       paperSize: paperSize == null
           ? this.paperSize
           : (paperSize == 'a4' ? 'a4' : 'a5'),
+      directPrint: directPrint ?? this.directPrint,
+      printerName: printerName != null ? printerName() : this.printerName,
     );
   }
 
@@ -68,6 +80,8 @@ class ShopSettings extends Equatable {
         autoPrint,
         ttsSource,
         paperSize,
+        directPrint,
+        printerName,
       ];
 }
 
@@ -84,9 +98,14 @@ class SettingsCubit extends Cubit<ShopSettings> {
   static const kPrint = 'auto_print';
   static const kTts = 'tts_source';
   static const kPaper = 'invoice_paper';
+  static const kDirectPrint = 'direct_print';
+  static const kPrinter = 'printer_name';
 
   static TtsSource parseSource(String? v) =>
       TtsSource.values.asNameMap()[v] ?? TtsSource.auto;
+
+  static String? _nullIfEmpty(String? v) =>
+      (v == null || v.trim().isEmpty) ? null : v;
 
   Future<void> load() async {
     try {
@@ -104,6 +123,8 @@ class SettingsCubit extends Cubit<ShopSettings> {
         paperSize: (await db.getSetting(kPaper) ?? 'a5') == 'a4'
             ? 'a4'
             : 'a5',
+        directPrint: (await db.getSetting(kDirectPrint) ?? '0') == '1',
+        printerName: _nullIfEmpty(await db.getSetting(kPrinter)),
       ));
     } catch (_) {
       // تبقى القيم الافتراضية
@@ -120,6 +141,8 @@ class SettingsCubit extends Cubit<ShopSettings> {
     bool? autoPrint,
     TtsSource? ttsSource,
     String? paperSize,
+    bool? directPrint,
+    String? Function()? printerName,
   }) async {
     final next = state.copyWith(
       shopName: shopName,
@@ -131,6 +154,8 @@ class SettingsCubit extends Cubit<ShopSettings> {
       autoPrint: autoPrint,
       ttsSource: ttsSource,
       paperSize: paperSize,
+      directPrint: directPrint,
+      printerName: printerName,
     );
     emit(next);
     try {
@@ -149,6 +174,9 @@ class SettingsCubit extends Cubit<ShopSettings> {
       await db.setSetting(kPrint, next.autoPrint ? '1' : '0');
       await db.setSetting(kTts, next.ttsSource.name);
       await db.setSetting(kPaper, next.paperSize);
+      await db.setSetting(kDirectPrint, next.directPrint ? '1' : '0');
+      final pn = next.printerName;
+      await db.setSetting(kPrinter, pn ?? '');
     } catch (_) {
       // التجاهل: الواجهة محدثة والخطأ غير قاتل
     }

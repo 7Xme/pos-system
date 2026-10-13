@@ -172,14 +172,19 @@ class CategoriesScreen extends StatelessWidget {
                                   height: 48,
                                   width: 48,
                                   child: IconButton.outlined(
-                                    onPressed: () =>
-                                        _confirmDelete(context, c),
+                                    onPressed: c.productCount > 0
+                                        ? null
+                                        : () =>
+                                            _confirmDelete(context, c),
                                     icon: const Icon(
                                       Icons.delete_outline,
                                       size: 22,
                                     ),
                                     color: Colors.red,
-                                    tooltip: 'حذف',
+                                    tooltip: c.productCount > 0
+                                        ? 'فيها ${c.productCount} منتج — '
+                                            'انقلها أولاً'
+                                        : 'حذف',
                                   ),
                                 ),
                               ],

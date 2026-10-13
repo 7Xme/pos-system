@@ -363,12 +363,14 @@ class _ProductTile extends StatelessWidget {
                 SizedBox(
                   height: 44,
                   width: 44,
-                  child: IconButton.outlined(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 22),
-                    color: Colors.red,
-                    tooltip: 'حذف',
-                  ),
+child: IconButton.outlined(
+                      onPressed: product.hasHistory ? null : onDelete,
+                      icon: const Icon(Icons.delete_outline, size: 22),
+                      color: Colors.red,
+                      tooltip: product.hasHistory
+                          ? 'له سجل مبيعات/مشتريات — يمكن تعطيله بدل حذفه'
+                          : 'حذف',
+                    ),
                 ),
               ],
             ),
@@ -437,6 +439,7 @@ class _ProductTile extends StatelessWidget {
     ctrl.dispose();
     if (count == null || !context.mounted) return;
     final n = count.clamp(1, 200);
+    final settings = context.read<SettingsCubit>().state;
     try {
       await A4PrintService.printBarcodeSheet(
         List.filled(
@@ -448,6 +451,8 @@ class _ProductTile extends StatelessWidget {
           ),
         ),
         currency: currency,
+        direct: settings.directPrint,
+        printerName: settings.printerName,
       );
     } catch (e) {
       if (!context.mounted) return;

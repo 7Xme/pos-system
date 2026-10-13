@@ -60,7 +60,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _supplierPhoneCtrl.text = state.supplierPhone;
   }
 
-  Future<({List<int>? logoBytes, String currency, String shop, String phone})>
+  Future<({List<int>? logoBytes, String currency, String shop, String phone, bool directPrint, String? printerName})>
       _printContext() async {
     final s = context.read<SettingsCubit>().state;
     List<int>? logoBytes;
@@ -77,6 +77,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       currency: s.currency,
       shop: s.shopName,
       phone: s.phone,
+      directPrint: s.directPrint,
+      printerName: s.printerName,
     );
   }
 
@@ -110,6 +112,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       supplierName: state.supplierName,
       supplierPhone:
           state.supplierPhone.isEmpty ? null : state.supplierPhone,
+      direct: ctx.directPrint,
+      printerName: ctx.printerName,
     );
   }
 
@@ -140,6 +144,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       logoBytes: ctx.logoBytes,
       supplierName: order.order.supplierName,
       supplierPhone: order.order.supplierPhone,
+      direct: ctx.directPrint,
+      printerName: ctx.printerName,
     );
   }
 
@@ -185,7 +191,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           context.read<PurchasesBloc>().add(PurchasesNoticeShown());
           // المخزون تغير (حفظ/استلام/حذف) — حدّث باقي الشاشات
           context.read<InventoryBloc>().add(InventoryStarted());
-          context.read<PosBloc>().add(PosStarted());
+          context.read<PosBloc>().add(PosCatalogRefreshed());
         }
       },
       builder: (context, state) {

@@ -541,6 +541,58 @@ class AppDatabase extends _$AppDatabase {
     ];
   }
 
+  // ── لقطة متسقة للنسخ الاحتياطي ─────────────────────────────
+
+  /// يفرّغ WAL ويكتب لقطة متسقة في [path] عبر VACUUM INTO.
+  /// آمنة أثناء التشغيل (لا نسخ ملف القاعدة الحي).
+  Future<void> exportSnapshot(String path) async {
+    await customStatement('PRAGMA wal_checkpoint(FULL)');
+    final safe = path.replaceAll("'", "''");
+    await customStatement("VACUUM INTO '$safe'");
+  }
+
+  /// التحقق من سلامة ملف قاعدة مُنسخ (لما قبل الاستيراد).
+  /// يرمي StateError برسالة عربية عند الفشل — ولا يغيّر شيئاً.
+  static Future<void> validateBackupFile(
+    AppDatabase db,
+  ) async {
+    try {
+      final check = await db
+          .customSelect('PRAGMA integrity_check')
+          .getSingle();
+      final result = (check.data['integrity_check'] as String?) ?? '';
+      if (result.toLowerCase() != 'ok') {
+        throw StateError('ملف النسخة الاحتياطية تالف (فحص سلامة قاعدة البيانات فشل)');
+      }
+      final uv = await db.customSelect('PRAGMA user_version').getSingle();
+      final version = (uv.data['user_version'] as num?)?.toInt() ?? 0;
+      if (version <= 0 || version > db.schemaVersion) {
+        throw StateError(
+          'نسخة احتياطية بإصدار غير متوافق ($version) — '
+          'البرنامج يدعم حتى ${db.schemaVersion}',
+        );
+      }
+      final tables = await db
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('products','invoices','invoice_items')",
+          )
+          .get();
+      if (tables.length < 3) {
+        throw StateError('النسخة الاحتياطية لا تحتوي على بيانات المتجر');
+      }
+    } on StateError {
+      rethrow;
+    } catch (e) {
+      throw StateError('تعذر قراءة ملف النسخة الاحتياطية: $e');
+    }
+  }
+
+  // ── لقطة متسقة للنسخ الاحتياطي ─────────────────────────────
+
+  /// إنشاء قاعدة على ملف محدد (للتحقق من نسخة مُستورَدة).
+  AppDatabase.at(String path) : super(_openFile(path));
+
   // ── إدارة المخزون (منتجات + فئات) ──────────────────────────
 
   Future<List<Category>> allCategories() {
@@ -604,16 +656,18 @@ class AppDatabase extends _$AppDatabase {
 
   /// هل للمنتج سجل (فواتير أو أوامر شراء)؟ — يمنع حذفه للحفاظ على السجل.
   Future<bool> hasProductHistory(int id) async {
-    final sale = await (select(invoiceItems)
-          ..where((t) => t.productId.equals(id))
-          ..limit(1))
-        .getSingleOrNull();
-    if (sale != null) return true;
-    final po = await (select(purchaseOrderItems)
-          ..where((t) => t.productId.equals(id))
-          ..limit(1))
-        .getSingleOrNull();
-    return po != null;
+    final pids = await productIdsWithHistory();
+    return pids.contains(id);
+  }
+
+  /// كل معرّفات المنتجات التي لها سجل مبيعات أو مشتريات (لتعطيل زر الحذف).
+  Future<Set<int>> productIdsWithHistory() async {
+    final rows = await customSelect(
+      'SELECT product_id AS pid FROM invoice_items '
+      'UNION SELECT product_id AS pid FROM purchase_order_items',
+      readsFrom: {invoiceItems, purchaseOrderItems},
+    ).get();
+    return {for (final r in rows) r.read<int>('pid')};
   }
 
   // ── المفضلة (أزرار الاختصار) + الإعدادات — v2 ────────────
@@ -765,3 +819,7 @@ LazyDatabase _openConnection() {
     return NativeDatabase.createInBackground(file);
   });
 }
+
+/// فتح ملف قاعدة محدد (التحقق من نسخة مُستورَدة).
+DatabaseConnection _openFile(String path) =>
+    DatabaseConnection(NativeDatabase(File(path)));

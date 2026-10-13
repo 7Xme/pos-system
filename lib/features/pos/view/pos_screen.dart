@@ -197,6 +197,8 @@ class _PosScreenState extends State<PosScreen> {
               currency: settings.currency,
               phone: phone,
               logoBytes: logoBytes,
+              direct: settings.directPrint,
+              printerName: settings.printerName,
             );
           }
           if (context.mounted) {

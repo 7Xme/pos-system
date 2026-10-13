@@ -19,7 +19,9 @@ class _BackupScreenState extends State<BackupScreen> {
   Future<void> _export() async {
     setState(() => _busy = true);
     try {
-      final path = await BackupService.exportBackup();
+      final path = await BackupService.exportBackup(
+        context.read<InventoryBloc>().db,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

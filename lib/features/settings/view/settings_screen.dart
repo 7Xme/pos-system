@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:printing/printing.dart';
 
 import '../../../core/images/product_image_store.dart';
 import '../../../core/tts/arabic_tts_service.dart';
@@ -97,6 +98,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم حفظ بيانات المتجر')),
+    );
+  }
+
+  /// اختيار طابعة للطباعة المباشرة وحفظ اسمها في الإعدادات.
+  Future<void> _pickPrinter() async {
+    final cubit = context.read<SettingsCubit>();
+    Printer? picked;
+    try {
+      picked = await Printing.pickPrinter(
+        context: context,
+        title: 'اختيار طابعة الفواتير',
+      );
+    } catch (_) {
+      picked = null;
+    }
+    if (picked == null || !mounted) return;
+    await cubit.update(printerName: () => picked!.name);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('تم اختيار الطابعة: ${picked.name}')),
     );
   }
 
@@ -450,6 +471,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 fontSize: 13,
                                 color: Colors.grey,
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              title: const Text(
+                                'طباعة مباشرة على الطابعة المحددة',
+                              ),
+                              subtitle: Text(
+                                s.directPrint
+                                    ? (s.printerName == null
+                                        ? 'الطابعة الافتراضية — بلا فتح حوار. '
+                                            'إن لم تتوفر تُفتح نافذة الطباعة.'
+                                        : '${s.printerName} — بلا فتح حوار. '
+                                            'إن لم تتوفر تُفتح نافذة الطباعة.')
+                                    : 'الوضع الحالي: تُفتح نافذة الطباعة لكل '
+                                        'مطبوعة لتختار الطابعة',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              value: s.directPrint,
+                              onChanged: (v) =>
+                                  cubit.update(directPrint: v),
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                SizedBox(
+                                  height: 48,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _pickPrinter,
+                                    icon: const Icon(Icons.print_outlined),
+                                    label: Text(
+                                      s.printerName == null
+                                          ? 'اختيار طابعة محددة'
+                                          : s.printerName!,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 48,
+                                  child: TextButton.icon(
+                                    onPressed: s.printerName == null
+                                        ? null
+                                        : () =>
+                                            cubit.update(printerName: () => null),
+                                    icon: const Icon(Icons.settings_backup_restore),
+                                    label: const Text(
+                                      'استخدام الطابعة الافتراضية',
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             const Text(

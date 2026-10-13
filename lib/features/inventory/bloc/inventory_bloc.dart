@@ -22,6 +22,9 @@ class InventoryProduct extends Equatable {
   final bool isActive;
   final bool isFavorite;
 
+  /// له سجل مبيعات/مشتريات — لا يمكن حذفه (يمكن تعطيله).
+  final bool hasHistory;
+
   const InventoryProduct({
     required this.id,
     required this.name,
@@ -35,6 +38,7 @@ class InventoryProduct extends Equatable {
     this.categoryName,
     required this.isActive,
     this.isFavorite = false,
+    this.hasHistory = false,
   });
 
   bool get isLowStock => stockQty <= minStock;
@@ -53,6 +57,7 @@ class InventoryProduct extends Equatable {
         categoryName,
         isActive,
         isFavorite,
+        hasHistory,
       ];
 }
 
@@ -284,6 +289,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     final products = await db.allProducts();
     final categories = await db.allCategories();
     final counts = await db.productCountByCategory();
+    final history = await db.productIdsWithHistory();
     final catNames = {for (final c in categories) c.id: c.name};
     _all = products
         .map(
@@ -301,6 +307,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
                 p.categoryId == null ? null : catNames[p.categoryId],
             isActive: p.isActive,
             isFavorite: p.isFavorite,
+            hasHistory: history.contains(p.id),
           ),
         )
         .toList();
