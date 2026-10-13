@@ -179,6 +179,11 @@ class _SalesScreenState extends State<SalesScreen> {
     final currency = context.read<SettingsCubit>().state.currency;
     final bloc = context.read<SalesBloc>();
     final subtotal = items.fold<double>(0, (s, e) => s + e.lineTotal);
+    // حالة الإرجاع تُحسب قبل فتح الحوار (سياق الحوار لا يرى البلوك دائماً).
+    final wrap = bloc.state.invoices
+        .where((x) => x.invoice.id == inv.id)
+        .firstOrNull;
+    final locked = wrap?.isFullyReturned ?? false;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -192,6 +197,21 @@ class _SalesScreenState extends State<SalesScreen> {
               children: [
                 Text('التاريخ: ${_fmtDate(inv.createdAt)}'),
                 Text('الكاشير: ${inv.cashier}'),
+                if (wrap != null && wrap.hasReturns)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      wrap.isFullyReturned
+                          ? 'الحالة: مُرتجعة بالكامل — لا يمكن إرجاعها مجدداً'
+                          : 'الحالة: مرتجعة جزئياً (${wrap.returnedQty} من ${wrap.itemCount})',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: wrap.isFullyReturned
+                            ? Colors.red[800]
+                            : Colors.orange[800],
+                      ),
+                    ),
+                  ),
                 const Divider(),
                 for (final it in items)
                   Padding(
@@ -270,12 +290,14 @@ class _SalesScreenState extends State<SalesScreen> {
             child: const Text('إغلاق'),
           ),
           FilledButton.tonalIcon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showReturnDialog(inv, items);
-            },
+            onPressed: locked
+                ? null
+                : () {
+                    Navigator.pop(ctx);
+                    _showReturnDialog(inv, items);
+                  },
             icon: const Icon(Icons.keyboard_return_outlined),
-            label: const Text('إرجاع'),
+            label: Text(locked ? 'مُرتجعة بالكامل' : 'إرجاع'),
           ),
           FilledButton.icon(
             onPressed: () => _reprint(inv, items),
@@ -1085,11 +1107,31 @@ class _SalesScreenState extends State<SalesScreen> {
             subtitle: Text(
               '${_fmtDate(inv.createdAt)} — ${s.itemCount} صنف'
               '${inv.discount > 0 ? ' — خصم ${inv.discount.toStringAsFixed(2)}' : ''}'
-              ' — ${inv.cashier}',
+              ' — ${inv.cashier}'
+              '${s.isFullyReturned ? ' — مُرتجعة بالكامل' : s.hasReturns ? ' — مرتجعة جزئياً' : ''}',
             ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (s.hasReturns)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Chip(
+                      label: Text(
+                        s.isFullyReturned ? 'مُرتجعة' : 'مرتجعة جزئياً',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      backgroundColor: s.isFullyReturned
+                          ? Colors.red[50]
+                          : Colors.orange[50],
+                      side: BorderSide(
+                        color: s.isFullyReturned
+                            ? Colors.red
+                            : Colors.orange,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
                 Text(
                   '${inv.total.toStringAsFixed(2)} $currency',
                   style: const TextStyle(
@@ -1107,15 +1149,19 @@ class _SalesScreenState extends State<SalesScreen> {
                 ),
                 const SizedBox(width: 6),
                 IconButton.outlined(
-                  tooltip: 'إرجاع',
-                  onPressed: () async {
-                    final items = await context
-                        .read<SalesBloc>()
-                        .db
-                        .invoiceItemsOf(inv.id);
-                    if (!mounted) return;
-                    await _showReturnDialog(inv, items);
-                  },
+                  tooltip: s.isFullyReturned
+                      ? 'مُرتجعة بالكامل — لا يمكن إرجاعها'
+                      : 'إرجاع',
+                  onPressed: s.isFullyReturned
+                      ? null
+                      : () async {
+                          final items = await context
+                              .read<SalesBloc>()
+                              .db
+                              .invoiceItemsOf(inv.id);
+                          if (!mounted) return;
+                          await _showReturnDialog(inv, items);
+                        },
                   icon: const Icon(
                     Icons.keyboard_return_outlined,
                     size: 22,

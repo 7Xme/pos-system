@@ -127,6 +127,44 @@ void main() {
       await sub.cancel();
     });
 
+    test('شارة الحالة: كاملة بعد إرجاع الكل وجزئية بعد إرجاع بعض', () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final (p, invNo) = await _seedSale(db);
+      final invId =
+          (await db.searchInvoices(invNo)).first.id;
+
+      final bloc = SalesBloc(db: db);
+      addTearDown(bloc.close);
+      bloc.add(const SalesStarted());
+      await Future.delayed(const Duration(milliseconds: 200));
+      expect(bloc.state.invoices.first.hasReturns, false);
+      expect(bloc.state.invoices.first.isFullyReturned, false);
+
+      bloc.add(SalesReturnConfirmed(
+        invoiceId: invId,
+        lines: {p.id: 1},
+        reason: '',
+      ));
+      await Future.delayed(const Duration(milliseconds: 200));
+      // _onReturnConfirmed يعيد التحميل تلقائياً
+      final partial = bloc.state.invoices.first;
+      expect(partial.hasReturns, true);
+      expect(partial.isFullyReturned, false);
+      expect(partial.returnedQty, 1);
+
+      bloc.add(SalesReturnConfirmed(
+        invoiceId: invId,
+        lines: {p.id: 2},
+        reason: '',
+      ));
+      await Future.delayed(const Duration(milliseconds: 200));
+      final full = bloc.state.invoices.first;
+      expect(full.hasReturns, true);
+      expect(full.isFullyReturned, true);
+      expect(full.returnedQty, 3);
+    });
+
     test('الإغلاق يخصم المردودات', () async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
@@ -181,6 +219,45 @@ void main() {
       await tester.tap(find.text('إرجاع الفاتورة كلها'));
       await tester.pumpAndSettle();
       expect(find.textContaining('60.00'), findsWidgets);
+    });
+
+    testWidgets('الفاتورة المرتجعة بالكامل تحمل شارة وزرها معطّل', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final (p, invNo) = await _seedSale(db);
+      final invId =
+          (await db.searchInvoices(invNo)).first.id;
+      await db.createReturn(
+        returnNumber: 'RET-BADGE-1',
+        invoiceId: invId,
+        reason: '',
+        items: [
+          ReturnItemsCompanion(
+            productId: Value(p.id),
+            qty: const Value(3),
+            unitPrice: const Value(20),
+            unitCost: const Value(12),
+            lineTotal: const Value(60),
+            productName: Value(p.name),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(_wrap(db, const SalesScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('مُرتجعة'), findsOneWidget);
+      final btn = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('مُرتجعة بالكامل — لا يمكن إرجاعها'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(btn.onPressed, isNull);
     });
   });
 

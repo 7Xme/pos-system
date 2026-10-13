@@ -4,15 +4,23 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/database/app_database.dart';
 
-/// فاتورة محفوظة مع عدد أصنافها (لعرض مختصر في القائمة).
+/// فاتورة محفوظة مع عدد أصنافها والكمية المرتجعة منها.
 class SavedInvoice extends Equatable {
   final Invoice invoice;
   final int itemCount;
+  final int returnedQty;
 
-  const SavedInvoice({required this.invoice, required this.itemCount});
+  const SavedInvoice({
+    required this.invoice,
+    required this.itemCount,
+    this.returnedQty = 0,
+  });
+
+  bool get hasReturns => returnedQty > 0;
+  bool get isFullyReturned => itemCount > 0 && returnedQty >= itemCount;
 
   @override
-  List<Object?> get props => [invoice, itemCount];
+  List<Object?> get props => [invoice, itemCount, returnedQty];
 }
 
 /// مولّد رقم مرتجع فريد: طابع زمني بالمللي ثانية + لاحقة عند التعارض.
@@ -515,11 +523,16 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       }
     }
     final counts = await db.invoiceItemCounts();
+    final returned = await db.returnQtyByInvoice();
     emit(state.copyWith(
       status: SalesStatus.ready,
       invoices: [
         for (final inv in rows)
-          SavedInvoice(invoice: inv, itemCount: counts[inv.id] ?? 0),
+          SavedInvoice(
+            invoice: inv,
+            itemCount: counts[inv.id] ?? 0,
+            returnedQty: returned[inv.id] ?? 0,
+          ),
       ],
       dayTotal: total,
     ));

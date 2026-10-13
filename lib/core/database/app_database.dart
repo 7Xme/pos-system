@@ -430,6 +430,21 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
+  /// الكمية المرتجعة لكل فاتورة (مفتاح: invoiceId) — لشارة الحالة في السجل.
+  Future<Map<int, int>> returnQtyByInvoice() async {
+    final map = <int, int>{};
+    final rows = await customSelect(
+      'SELECT r.invoice_id AS iid, COALESCE(SUM(ri.qty), 0) AS q '
+      'FROM return_items ri JOIN returns r ON r.id = ri.return_id '
+      'GROUP BY r.invoice_id',
+      readsFrom: {returnItems, returns},
+    ).get();
+    for (final r in rows) {
+      map[r.read<int>('iid')] = r.read<int>('q');
+    }
+    return map;
+  }
+
   /// إجمالي المردودات في مدة (شاملة اليومين).
   Future<double> returnsTotalInRange(DateTime from, DateTime to) async {
     final (start, end) = _rangeBounds(from, to);
