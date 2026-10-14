@@ -12,6 +12,25 @@ ProductDto _toDto(Product p) => ProductDto(
       imagePath: p.imagePath,
     );
 
+/// نفس [ProductDto] مع كل الباركودات (الرئيسي أولاً).
+Future<ProductDto> _toDtoWithBarcodes(
+  Product p,
+  AppDatabase db,
+) async =>
+    _toDto(p).copyWithBarcodeList(await db.barcodesOf(p.id));
+
+extension ProductDtoBarcodes on ProductDto {
+  ProductDto copyWithBarcodeList(List<String> list) => ProductDto(
+        id: id,
+        name: name,
+        barcode: barcode,
+        price: price,
+        stockQty: stockQty,
+        imagePath: imagePath,
+        barcodes: list,
+      );
+}
+
 /// مصدر الأصناف الحقيقي من Drift
 class DriftCatalogRepository implements PosCatalogRepository {
   final AppDatabase db;
@@ -20,19 +39,31 @@ class DriftCatalogRepository implements PosCatalogRepository {
   @override
   Future<List<ProductDto>> search(String query) async {
     final rows = await db.searchProducts(query);
-    return rows.map(_toDto).toList();
+    final map = await db.barcodesOfAll([for (final r in rows) r.id]);
+    return [
+      for (final r in rows)
+        _toDto(r).copyWithBarcodeList(
+          map[r.id] ?? [if (r.barcode.trim().isNotEmpty) r.barcode],
+        ),
+    ];
   }
 
   @override
   Future<ProductDto?> findByBarcode(String barcode) async {
     final row = await db.findByBarcode(barcode);
-    return row == null ? null : _toDto(row);
+    return row == null ? null : await _toDtoWithBarcodes(row, db);
   }
 
   @override
   Future<List<ProductDto>> favorites() async {
     final rows = await db.favoriteProducts();
-    return rows.map(_toDto).toList();
+    final map = await db.barcodesOfAll([for (final r in rows) r.id]);
+    return [
+      for (final r in rows)
+        _toDto(r).copyWithBarcodeList(
+          map[r.id] ?? [if (r.barcode.trim().isNotEmpty) r.barcode],
+        ),
+    ];
   }
 }
 

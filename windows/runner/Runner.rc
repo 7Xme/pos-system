@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.bookstore" "\0"
-            VALUE "FileDescription", "bookstore_pos" "\0"
+            VALUE "CompanyName", "YPOS" "\0"
+            VALUE "FileDescription", "YPOS - Point of Sale System" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "bookstore_pos" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.bookstore. All rights reserved." "\0"
-            VALUE "OriginalFilename", "bookstore_pos.exe" "\0"
-            VALUE "ProductName", "bookstore_pos" "\0"
+            VALUE "InternalName", "YPOS" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 YPOS. All rights reserved." "\0"
+            VALUE "OriginalFilename", "YPOS.exe" "\0"
+            VALUE "ProductName", "YPOS" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

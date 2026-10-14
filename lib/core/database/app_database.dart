@@ -21,6 +21,7 @@ part 'app_database.g.dart';
     Settings,
     Returns,
     ReturnItems,
+    ProductBarcodes,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -31,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
       : super(DatabaseConnection(NativeDatabase.memory()));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -51,12 +52,22 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(returns);
             await m.createTable(returnItems);
           }
+          if (from < 5) {
+            // باركودات متعددة: جدول جديد + نسخ الباركود الرئيسي لكل منتج
+            await m.createTable(productBarcodes);
+            await customStatement(
+              'INSERT OR IGNORE INTO product_barcodes '
+              '(product_id, barcode, sort_order) '
+              'SELECT id, barcode, 0 FROM products '
+              "WHERE barcode IS NOT NULL AND TRIM(barcode) <> ''",
+            );
+          }
         },
       );
 
   // ── استعلامات سريعة للـ POS ─────────────────────────────
 
-  /// بحث بالاسم أو الباركود (للسلة + شاشة البيع)
+  /// بحث بالاسم أو أي باركود للمنتج (رئيسي أو إضافي) — سلسلة + شاشة البيع.
   Future<List<Product>> searchProducts(String query) {
     if (query.trim().isEmpty) {
       return (select(products)
@@ -66,20 +77,169 @@ class AppDatabase extends _$AppDatabase {
           .get();
     }
     final q = '%${query.trim()}%';
+    final alt = customSelect(
+      'SELECT product_id AS pid FROM product_barcodes WHERE barcode LIKE ?',
+      variables: [Variable<String>(q)],
+      readsFrom: {productBarcodes},
+    );
     return (select(products)
           ..where(
             (t) =>
                 t.isActive.equals(true) &
-                (t.name.like(q) | t.barcode.like(q)),
+                (t.name.like(q) |
+                    t.barcode.like(q) |
+                    existsQuery(alt)),
           )
           ..limit(50))
         .get();
   }
 
+  /// كل باركودات منتج بالترتيب (الرئيسي أولاً). يحوي دائماً الباركود الرئيسي.
+  Future<List<String>> barcodesOf(int productId) async {
+    final rows = await (select(productBarcodes)
+          ..where((t) => t.productId.equals(productId))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder),
+            (t) => OrderingTerm.asc(t.id)]))
+        .get();
+    final list = [for (final r in rows) r.barcode];
+    final prod = await getProduct(productId);
+    final primary = prod?.barcode.trim() ?? '';
+    if (primary.isNotEmpty && !list.contains(primary)) list.insert(0, primary);
+    return list;
+  }
+
+  /// كل باركودات عدة منتجات دفعة واحدة (مفتاح: productId).
+  Future<Map<int, List<String>>> barcodesOfAll(Iterable<int> ids) async {
+    final list = ids.toList();
+    if (list.isEmpty) return {};
+    final rows = await (select(productBarcodes)
+          ..where((t) => t.productId.isIn(list))
+          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder),
+            (t) => OrderingTerm.asc(t.id)]))
+        .get();
+    final map = <int, List<String>>{};
+    for (final r in rows) {
+      (map[r.productId] ??= []).add(r.barcode);
+    }
+    return map;
+  }
+
+  /// من يملك هذا الباركود؟ (لرسالة التعارض) — يستثني منتجاً معيّناً.
+  Future<({int id, String name})?> barcodeOwner(
+    String code, {
+    int? exceptProductId,
+  }) async {
+    final c = code.trim();
+    if (c.isEmpty) return null;
+    final row = await customSelect(
+      'SELECT p.id AS pid, p.name AS pname FROM products p '
+      'WHERE p.barcode = \$code AND (\$except < 0 OR p.id <> \$except) '
+      'UNION ALL '
+      'SELECT p.id AS pid, p.name AS pname FROM product_barcodes b '
+      'JOIN products p ON p.id = b.product_id '
+      'WHERE b.barcode = \$code AND (\$except < 0 OR p.id <> \$except) '
+      'LIMIT 1',
+      variables: [
+        Variable<String>('code', c),
+        Variable<int>('except', exceptProductId ?? -1),
+      ],
+      readsFrom: {products, productBarcodes},
+    ).get();
+    if (row.isEmpty) return null;
+    return (id: row.first.read<int>('pid'), name: row.first.read<String>('pname'));
+  }
+
+  /// حفظ باركودات المنتج: الأول رئيسي (ينعكس على products.barcode).
+  /// يرمي StateError برسالة عربية إذا كان باركود مستخدماً في منتج آخر.
+  Future<void> setProductBarcodes(
+    int productId,
+    List<String> barcodes,
+  ) {
+    return transaction(() async {
+      // تنظيف + فرز + إزالة الفارغ والمكرر
+      final seen = <String>{};
+      final clean = <String>[];
+      for (final raw in barcodes) {
+        final b = raw.trim();
+        if (b.isEmpty || !seen.add(b)) continue;
+        final owner = await barcodeOwner(b, exceptProductId: productId);
+        if (owner != null) {
+          throw StateError(
+            'الباركود $b مستخدم في منتج آخر: «${owner.name}»',
+          );
+        }
+        clean.add(b);
+      }
+      final primary = clean.isEmpty ? '' : clean.first;
+      final prod = await getProduct(productId);
+      if (prod == null) throw StateError('المنتج غير موجود');
+      if (prod.barcode != primary) {
+        await (update(products)..where((t) => t.id.equals(productId))).write(
+              ProductsCompanion(
+                barcode: Value(primary),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+      }
+      await (delete(productBarcodes)
+            ..where((t) => t.productId.equals(productId)))
+          .go();
+      for (var i = 0; i < clean.length; i++) {
+        await into(productBarcodes).insert(
+          ProductBarcodesCompanion.insert(
+            productId: productId,
+            barcode: clean[i],
+            sortOrder: Value(i),
+          ),
+        );
+      }
+    });
+  }
+
+  /// ينشئ المنتج مع باركوداته (رئيسي + إضافية) في Transaction واحدة.
+  Future<int> insertProductWithBarcodes(
+    ProductsCompanion entry,
+    List<String> barcodes,
+  ) {
+    return transaction(() async {
+      final seen = <String>{};
+      final clean = <String>[];
+      for (final raw in barcodes) {
+        final b = raw.trim();
+        if (b.isEmpty || !seen.add(b)) continue;
+        final owner = await barcodeOwner(b);
+        if (owner != null) {
+          throw StateError('الباركود $b مستخدم في منتج آخر: «${owner.name}»');
+        }
+        clean.add(b);
+      }
+      final id = await into(products).insert(entry);
+      for (var i = 0; i < clean.length; i++) {
+        await into(productBarcodes).insert(
+          ProductBarcodesCompanion.insert(
+            productId: id,
+            barcode: clean[i],
+            sortOrder: Value(i),
+          ),
+        );
+      }
+      return id;
+    });
+  }
+
+  /// منتج بالباركود الرئيسي أو أي باركود إضافي.
   Future<Product?> findByBarcode(String barcode) {
+    final code = barcode.trim();
+    final alt = customSelect(
+      'SELECT product_id AS pid FROM product_barcodes WHERE barcode = ?',
+      variables: [Variable<String>(code)],
+      readsFrom: {productBarcodes},
+    );
     return (select(products)
           ..where(
-            (t) => t.barcode.equals(barcode.trim()) & t.isActive.equals(true),
+            (t) =>
+                t.isActive.equals(true) &
+                (t.barcode.equals(code) | existsQuery(alt)),
           )
           ..limit(1))
         .getSingleOrNull();

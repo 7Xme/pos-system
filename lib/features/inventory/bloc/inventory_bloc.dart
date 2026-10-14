@@ -25,6 +25,9 @@ class InventoryProduct extends Equatable {
   /// له سجل مبيعات/مشتريات — لا يمكن حذفه (يمكن تعطيله).
   final bool hasHistory;
 
+  /// كل باركودات المنتج (الرئيسي أولاً).
+  final List<String> barcodes;
+
   const InventoryProduct({
     required this.id,
     required this.name,
@@ -39,7 +42,12 @@ class InventoryProduct extends Equatable {
     required this.isActive,
     this.isFavorite = false,
     this.hasHistory = false,
+    this.barcodes = const [],
   });
+
+  /// عدد الباركودات الإضافية غير الرئيسية.
+  int get extraBarcodesCount =>
+      (barcodes.isEmpty ? 1 : barcodes.length) - 1;
 
   bool get isLowStock => stockQty <= minStock;
 
@@ -58,6 +66,7 @@ class InventoryProduct extends Equatable {
         isActive,
         isFavorite,
         hasHistory,
+        barcodes,
       ];
 }
 
@@ -89,6 +98,9 @@ class ProductDraft extends Equatable {
   final String? existingImagePath;
   final bool isActive;
 
+  /// كل الباركودات — الأول هو الرئيسي. فارغة = استخدم [barcode] فقط.
+  final List<String> barcodes;
+
   const ProductDraft({
     this.id,
     required this.name,
@@ -100,7 +112,20 @@ class ProductDraft extends Equatable {
     this.categoryId,
     this.existingImagePath,
     this.isActive = true,
+    this.barcodes = const [],
   });
+
+  /// القائمة الفعلية للباركودات (مع ضمان أن الأول = [barcode]).
+  List<String> get allBarcodes {
+    final list = <String>[];
+    for (final b in barcodes) {
+      final t = b.trim();
+      if (t.isNotEmpty && !list.contains(t)) list.add(t);
+    }
+    final primary = barcode.trim();
+    if (primary.isNotEmpty && !list.contains(primary)) list.insert(0, primary);
+    return list;
+  }
 
   @override
   List<Object?> get props => [
@@ -114,6 +139,7 @@ class ProductDraft extends Equatable {
         categoryId,
         existingImagePath,
         isActive,
+        barcodes,
       ];
 }
 
@@ -290,6 +316,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     final categories = await db.allCategories();
     final counts = await db.productCountByCategory();
     final history = await db.productIdsWithHistory();
+    final barcodeMap = await db.barcodesOfAll([for (final p in products) p.id]);
     final catNames = {for (final c in categories) c.id: c.name};
     _all = products
         .map(
@@ -308,6 +335,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
             isActive: p.isActive,
             isFavorite: p.isFavorite,
             hasHistory: history.contains(p.id),
+            barcodes: barcodeMap[p.id] ??
+                [if (p.barcode.trim().isNotEmpty) p.barcode],
           ),
         )
         .toList();
@@ -367,7 +396,10 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     return _all.where((p) {
       if (low && !p.isLowStock) return false;
       if (catId != null && p.categoryId != catId) return false;
-      if (q.isNotEmpty && !p.name.contains(q) && !p.barcode.contains(q)) {
+      if (q.isNotEmpty &&
+          !p.name.contains(q) &&
+          !p.barcode.contains(q) &&
+          !p.barcodes.any((b) => b.contains(q))) {
         return false;
       }
       return true;
@@ -391,10 +423,10 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
       }
       final d = e.draft;
       if (d.id == null) {
-        await db.insertProduct(
+        await db.insertProductWithBarcodes(
           ProductsCompanion.insert(
             name: d.name,
-            barcode: d.barcode,
+            barcode: d.allBarcodes.isEmpty ? d.barcode : d.allBarcodes.first,
             price: d.price,
             cost: Value(d.cost),
             stockQty: Value(d.stockQty),
@@ -403,17 +435,19 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
             imagePath: Value(imagePath),
             isActive: Value(d.isActive),
           ),
+          d.allBarcodes,
         );
         emit(state.copyWith(
           status: InventoryStatus.ready,
           notice: 'تمت إضافة «${d.name}» بنجاح',
         ));
       } else {
+        final all = d.allBarcodes;
         await db.updateProduct(
           d.id!,
           ProductsCompanion(
             name: Value(d.name),
-            barcode: Value(d.barcode),
+            barcode: Value(all.isEmpty ? d.barcode : all.first),
             price: Value(d.price),
             cost: Value(d.cost),
             stockQty: Value(d.stockQty),
@@ -424,6 +458,7 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
             updatedAt: Value(DateTime.now()),
           ),
         );
+        await db.setProductBarcodes(d.id!, all);
         emit(state.copyWith(
           status: InventoryStatus.ready,
           notice: 'تم حفظ تعديلات «${d.name}»',
@@ -431,10 +466,13 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
       }
       await _reload(emit);
       emit(state.copyWith(notice: 'تم الحفظ بنجاح'));
-    } catch (_) {
+    } catch (err) {
+      final msg = err is StateError && err.message.toString().isNotEmpty
+          ? err.message.toString()
+          : 'تعذر الحفظ — تأكد أن الباركود غير مستخدم لمنتج آخر';
       emit(state.copyWith(
         status: InventoryStatus.failure,
-        error: 'تعذر الحفظ — تأكد أن الباركود غير مستخدم لمنتج آخر',
+        error: msg,
       ));
       emit(state.copyWith(status: InventoryStatus.ready, error: null));
     }

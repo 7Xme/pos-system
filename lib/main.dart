@@ -24,7 +24,7 @@ Future<void> main() async {
       WindowOptions(
         size: const Size(1440, 860),
         minimumSize: const Size(1280, 720),
-        title: 'نظام نقطة البيع — مكتبة',
+        title: 'YPOS — نظام نقطة بيع',
       ),
       () async {
         await windowManager.show();
@@ -82,8 +82,8 @@ class BookstorePosApp extends StatelessWidget {
             create: (_) => SettingsCubit(db: db)..load(),
           ),
         ],
-        child: MaterialApp(
-          title: 'نقطة البيع — مكتبة',
+child: MaterialApp(
+        title: 'YPOS',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
           // RTL كامل + عربي

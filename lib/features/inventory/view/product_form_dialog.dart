@@ -33,7 +33,7 @@ class _ProductFormDialog extends StatefulWidget {
 class _ProductFormDialogState extends State<_ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
-  late final TextEditingController _barcode;
+  late final List<TextEditingController> _barcodeCtrls;
   late final TextEditingController _price;
   late final TextEditingController _cost;
   late final TextEditingController _stock;
@@ -51,9 +51,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     super.initState();
     final p = widget.product;
     _name = TextEditingController(text: p?.name ?? '');
-    _barcode = TextEditingController(text: p?.barcode ?? '');
-    _price = TextEditingController(text: p == null ? '' : '${
-      p.price}');
+    // كل باركود في سطر — السطر الأول هو الرئيسي
+    final initial = <String>[
+      if (p != null && p.barcodes.isNotEmpty) ...p.barcodes else p?.barcode ?? '',
+    ];
+    _barcodeCtrls = [
+      for (final b in initial) TextEditingController(text: b),
+    ];
+    _price = TextEditingController(
+      text: p == null ? '' : '${p.price}',
+    );
     _cost = TextEditingController(text: p == null ? '' : '${p.cost}');
     _stock = TextEditingController(text: p == null ? '0' : '${p.stockQty}');
     _minStock =
@@ -65,12 +72,25 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   @override
   void dispose() {
     _name.dispose();
-    _barcode.dispose();
+    for (final c in _barcodeCtrls) {
+      c.dispose();
+    }
     _price.dispose();
     _cost.dispose();
     _stock.dispose();
     _minStock.dispose();
     super.dispose();
+  }
+
+  void _addBarcodeRow([String value = '']) {
+    setState(() => _barcodeCtrls.add(TextEditingController(text: value)));
+  }
+
+  void _removeBarcodeRow(int i) {
+    if (_barcodeCtrls.length == 1) return; // يبقى سطر واحد على الأقل
+    setState(() {
+      _barcodeCtrls.removeAt(i).dispose();
+    });
   }
 
   Future<void> _pickImage() async {
@@ -92,6 +112,16 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       setState(() => _formError = 'السعر غير صالح');
       return;
     }
+    // كل باركود في سطر — الأول هو الرئيسي
+    final codes = <String>[];
+    for (final c in _barcodeCtrls) {
+      final t = c.text.trim();
+      if (t.isNotEmpty && !codes.contains(t)) codes.add(t);
+    }
+    if (codes.isEmpty) {
+      setState(() => _formError = 'أدخل باركوداً واحداً على الأقل');
+      return;
+    }
     String? imagePath = widget.product?.imagePath;
     if (_removeImage) imagePath = null;
     context.read<InventoryBloc>().add(
@@ -99,7 +129,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
             ProductDraft(
               id: widget.product?.id,
               name: _name.text.trim(),
-              barcode: _barcode.text.trim(),
+              barcode: codes.first,
+              barcodes: codes,
               price: price,
               cost: double.tryParse(_cost.text.trim()) ?? 0,
               stockQty: int.tryParse(_stock.text.trim()) ?? 0,
@@ -187,33 +218,67 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                       v == null || v.trim().isEmpty ? 'أدخل الاسم' : null,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _barcode,
-                        decoration: const InputDecoration(
-                          labelText: 'الباركود *',
-                        ),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'أدخل الباركود'
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      height: 56,
-                      child: OutlinedButton(
-                        onPressed: () => setState(() {
-                          _barcode.text =
-                              DateTime.now().millisecondsSinceEpoch.toString();
-                        }),
-                        child: const Text('توليد'),
-                      ),
-                    ),
-                  ],
+                // الباركودات — كل باركود في سطر (الأول هو الرئيسي)
+                const Text(
+                  'الباركودات (كل باركود في سطر — الأول هو الرئيسي)',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
+                for (var i = 0; i < _barcodeCtrls.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _barcodeCtrls[i],
+                            decoration: InputDecoration(
+                              labelText: i == 0
+                                  ? 'الباركود * (رئيسي)'
+                                  : 'باركود إضافي',
+                              prefixIcon: const Icon(Icons.qr_code_2),
+                              suffixIcon: i == 0
+                                  ? null
+                                  : IconButton(
+                                      icon: const Icon(Icons.close),
+                                      tooltip: 'حذف الباركود',
+                                      onPressed: () =>
+                                          _removeBarcodeRow(i),
+                                    ),
+                            ),
+                            validator: (v) =>
+                                (i == 0 && (v == null || v.trim().isEmpty))
+                                    ? 'أدخل الباركود'
+                                    : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 56,
+                          child: OutlinedButton(
+                            onPressed: () => setState(() {
+                              _barcodeCtrls[i].text =
+                                  DateTime.now().microsecondsSinceEpoch
+                                      .toString();
+                            }),
+                            child: const Text('توليد'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                SizedBox(
+                  height: 48,
+                  child: TextButton.icon(
+                    onPressed: () => _addBarcodeRow(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة باركود آخر'),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     Expanded(

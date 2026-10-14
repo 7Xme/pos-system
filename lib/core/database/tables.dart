@@ -69,6 +69,21 @@ class InvoiceItems extends Table {
   RealColumn get unitCost => real().withDefault(const Constant(0))();
 }
 
+/// باركودات متعددة للمنتج — v5.
+/// كل باركود في سطر، و`barcode` فريد عالمياً حتى لا يتضارب المسح بين منتجين.
+/// products.barcode يبقى الباركود الرئيسي (مرآة للسطر الأول) للطباعة والعرض.
+class ProductBarcodes extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get productId => integer().references(
+        Products,
+        #id,
+        onDelete: KeyAction.cascade,
+      )();
+  TextColumn get barcode => text().unique()();
+  // ترتيب العرض داخل المنتج (0 = الرئيسي)
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+}
+
 /// المرتجعات — v4: إرجاع جزئي لأصناف فاتورة مع استعادة المخزون.
 class Returns extends Table {
   IntColumn get id => integer().autoIncrement()();

@@ -3547,6 +3547,265 @@ class ReturnItemsCompanion extends UpdateCompanion<ReturnItem> {
   }
 }
 
+class $ProductBarcodesTable extends ProductBarcodes
+    with TableInfo<$ProductBarcodesTable, ProductBarcode> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductBarcodesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _barcodeMeta =
+      const VerificationMeta('barcode');
+  @override
+  late final GeneratedColumn<String> barcode = GeneratedColumn<String>(
+      'barcode', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _sortOrderMeta =
+      const VerificationMeta('sortOrder');
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+      'sort_order', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  @override
+  List<GeneratedColumn> get $columns => [id, productId, barcode, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_barcodes';
+  @override
+  VerificationContext validateIntegrity(Insertable<ProductBarcode> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('barcode')) {
+      context.handle(_barcodeMeta,
+          barcode.isAcceptableOrUnknown(data['barcode']!, _barcodeMeta));
+    } else if (isInserting) {
+      context.missing(_barcodeMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(_sortOrderMeta,
+          sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductBarcode map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductBarcode(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}product_id'])!,
+      barcode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}barcode'])!,
+      sortOrder: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
+    );
+  }
+
+  @override
+  $ProductBarcodesTable createAlias(String alias) {
+    return $ProductBarcodesTable(attachedDatabase, alias);
+  }
+}
+
+class ProductBarcode extends DataClass implements Insertable<ProductBarcode> {
+  final int id;
+  final int productId;
+  final String barcode;
+  final int sortOrder;
+  const ProductBarcode(
+      {required this.id,
+      required this.productId,
+      required this.barcode,
+      required this.sortOrder});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['product_id'] = Variable<int>(productId);
+    map['barcode'] = Variable<String>(barcode);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  ProductBarcodesCompanion toCompanion(bool nullToAbsent) {
+    return ProductBarcodesCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      barcode: Value(barcode),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory ProductBarcode.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductBarcode(
+      id: serializer.fromJson<int>(json['id']),
+      productId: serializer.fromJson<int>(json['productId']),
+      barcode: serializer.fromJson<String>(json['barcode']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'productId': serializer.toJson<int>(productId),
+      'barcode': serializer.toJson<String>(barcode),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  ProductBarcode copyWith(
+          {int? id, int? productId, String? barcode, int? sortOrder}) =>
+      ProductBarcode(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        barcode: barcode ?? this.barcode,
+        sortOrder: sortOrder ?? this.sortOrder,
+      );
+  ProductBarcode copyWithCompanion(ProductBarcodesCompanion data) {
+    return ProductBarcode(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      barcode: data.barcode.present ? data.barcode.value : this.barcode,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductBarcode(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('barcode: $barcode, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, productId, barcode, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductBarcode &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.barcode == this.barcode &&
+          other.sortOrder == this.sortOrder);
+}
+
+class ProductBarcodesCompanion extends UpdateCompanion<ProductBarcode> {
+  final Value<int> id;
+  final Value<int> productId;
+  final Value<String> barcode;
+  final Value<int> sortOrder;
+  const ProductBarcodesCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.barcode = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  });
+  ProductBarcodesCompanion.insert({
+    this.id = const Value.absent(),
+    required int productId,
+    required String barcode,
+    this.sortOrder = const Value.absent(),
+  })  : productId = Value(productId),
+        barcode = Value(barcode);
+  static Insertable<ProductBarcode> custom({
+    Expression<int>? id,
+    Expression<int>? productId,
+    Expression<String>? barcode,
+    Expression<int>? sortOrder,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (barcode != null) 'barcode': barcode,
+      if (sortOrder != null) 'sort_order': sortOrder,
+    });
+  }
+
+  ProductBarcodesCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? productId,
+      Value<String>? barcode,
+      Value<int>? sortOrder}) {
+    return ProductBarcodesCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      barcode: barcode ?? this.barcode,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (barcode.present) {
+      map['barcode'] = Variable<String>(barcode.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductBarcodesCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('barcode: $barcode, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3560,6 +3819,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SettingsTable settings = $SettingsTable(this);
   late final $ReturnsTable returns = $ReturnsTable(this);
   late final $ReturnItemsTable returnItems = $ReturnItemsTable(this);
+  late final $ProductBarcodesTable productBarcodes =
+      $ProductBarcodesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3573,7 +3834,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         purchaseOrderItems,
         settings,
         returns,
-        returnItems
+        returnItems,
+        productBarcodes
       ];
 }
 
@@ -5363,6 +5625,159 @@ typedef $$ReturnItemsTableProcessedTableManager = ProcessedTableManager<
     (ReturnItem, BaseReferences<_$AppDatabase, $ReturnItemsTable, ReturnItem>),
     ReturnItem,
     PrefetchHooks Function()>;
+typedef $$ProductBarcodesTableCreateCompanionBuilder = ProductBarcodesCompanion
+    Function({
+  Value<int> id,
+  required int productId,
+  required String barcode,
+  Value<int> sortOrder,
+});
+typedef $$ProductBarcodesTableUpdateCompanionBuilder = ProductBarcodesCompanion
+    Function({
+  Value<int> id,
+  Value<int> productId,
+  Value<String> barcode,
+  Value<int> sortOrder,
+});
+
+class $$ProductBarcodesTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductBarcodesTable> {
+  $$ProductBarcodesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get barcode => $composableBuilder(
+      column: $table.barcode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnFilters(column));
+}
+
+class $$ProductBarcodesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductBarcodesTable> {
+  $$ProductBarcodesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get barcode => $composableBuilder(
+      column: $table.barcode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+      column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ProductBarcodesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductBarcodesTable> {
+  $$ProductBarcodesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<String> get barcode =>
+      $composableBuilder(column: $table.barcode, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+}
+
+class $$ProductBarcodesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProductBarcodesTable,
+    ProductBarcode,
+    $$ProductBarcodesTableFilterComposer,
+    $$ProductBarcodesTableOrderingComposer,
+    $$ProductBarcodesTableAnnotationComposer,
+    $$ProductBarcodesTableCreateCompanionBuilder,
+    $$ProductBarcodesTableUpdateCompanionBuilder,
+    (
+      ProductBarcode,
+      BaseReferences<_$AppDatabase, $ProductBarcodesTable, ProductBarcode>
+    ),
+    ProductBarcode,
+    PrefetchHooks Function()> {
+  $$ProductBarcodesTableTableManager(
+      _$AppDatabase db, $ProductBarcodesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductBarcodesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductBarcodesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductBarcodesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> productId = const Value.absent(),
+            Value<String> barcode = const Value.absent(),
+            Value<int> sortOrder = const Value.absent(),
+          }) =>
+              ProductBarcodesCompanion(
+            id: id,
+            productId: productId,
+            barcode: barcode,
+            sortOrder: sortOrder,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int productId,
+            required String barcode,
+            Value<int> sortOrder = const Value.absent(),
+          }) =>
+              ProductBarcodesCompanion.insert(
+            id: id,
+            productId: productId,
+            barcode: barcode,
+            sortOrder: sortOrder,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ProductBarcodesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ProductBarcodesTable,
+    ProductBarcode,
+    $$ProductBarcodesTableFilterComposer,
+    $$ProductBarcodesTableOrderingComposer,
+    $$ProductBarcodesTableAnnotationComposer,
+    $$ProductBarcodesTableCreateCompanionBuilder,
+    $$ProductBarcodesTableUpdateCompanionBuilder,
+    (
+      ProductBarcode,
+      BaseReferences<_$AppDatabase, $ProductBarcodesTable, ProductBarcode>
+    ),
+    ProductBarcode,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5385,4 +5800,6 @@ class $AppDatabaseManager {
       $$ReturnsTableTableManager(_db, _db.returns);
   $$ReturnItemsTableTableManager get returnItems =>
       $$ReturnItemsTableTableManager(_db, _db.returnItems);
+  $$ProductBarcodesTableTableManager get productBarcodes =>
+      $$ProductBarcodesTableTableManager(_db, _db.productBarcodes);
 }

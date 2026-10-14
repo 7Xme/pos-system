@@ -10,6 +10,9 @@ class ProductDto extends Equatable {
   final int stockQty;
   final String? imagePath;
 
+  /// كل باركودات المنتج (الرئيسي أولاً) — أي منها يُعرف بالمنتج عند المسح.
+  final List<String> barcodes;
+
   const ProductDto({
     required this.id,
     required this.name,
@@ -17,10 +20,14 @@ class ProductDto extends Equatable {
     required this.price,
     required this.stockQty,
     this.imagePath,
+    this.barcodes = const [],
   });
 
+  List<String> get allBarcodes =>
+      barcodes.isEmpty ? [barcode] : barcodes;
+
   @override
-  List<Object?> get props => [id, name, barcode, price, stockQty];
+  List<Object?> get props => [id, name, barcode, price, stockQty, barcodes];
 }
 
 class CartLine extends Equatable {
