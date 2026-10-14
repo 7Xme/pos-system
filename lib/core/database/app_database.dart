@@ -77,8 +77,11 @@ class AppDatabase extends _$AppDatabase {
           .get();
     }
     final q = '%${query.trim()}%';
+    // استعلام فرعي مرتبط بالمنتج الخارجي
     final alt = select(productBarcodes)
-      ..where((b) => b.barcode.like(q));
+      ..where(
+        (b) => b.barcode.like(q) & b.productId.equalsExp(products.id),
+      );
     return (select(products)
           ..where(
             (t) =>
@@ -215,8 +218,6 @@ class AppDatabase extends _$AppDatabase {
         clean.add(b);
       }
       final id = await into(products).insert(entry);
-      // ignore: avoid_print
-      print('INSERT WITH clean=$clean id=$id');
       for (var i = 0; i < clean.length; i++) {
         await into(productBarcodes).insert(
           ProductBarcodesCompanion.insert(
@@ -233,8 +234,11 @@ class AppDatabase extends _$AppDatabase {
   /// منتج بالباركود الرئيسي أو أي باركود إضافي.
   Future<Product?> findByBarcode(String barcode) {
     final code = barcode.trim();
+    // استعلام فرعي مرتبط (correlated) بالمنتج الخارجي — بدون ذلك يطابق كل المنتجات
     final alt = select(productBarcodes)
-      ..where((b) => b.barcode.equals(code));
+      ..where(
+        (b) => b.barcode.equals(code) & b.productId.equalsExp(products.id),
+      );
     return (select(products)
           ..where(
             (t) =>

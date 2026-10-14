@@ -230,14 +230,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // تشخيص: محتوى الحقول قبل الحفظ
-      final vals = tester
-          .widgetList<TextFormField>(find.byType(TextFormField))
-          .map((f) => f.controller?.text)
-          .toList();
-      // ignore: avoid_print
-      print('FIELD VALUES: $vals');
-
       await tester.tap(find.text('إضافة المنتج'));
       await tester.pumpAndSettle();
       // انتظار عمل البلوك غير المتزامن (الكتابة في القاعدة)
@@ -246,18 +238,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // تشخيص: هل أُغلق النموذج (الحفظ نجح) أم لا يزال مفتوحاً (فشل التحقق)؟
-      if (find.text('منتج جديد').evaluate().isNotEmpty) {
-        fail('النموذج ما زال مفتوحاً — فشل التحقق');
-      }
+      expect(find.text('منتج جديد').evaluate(), isEmpty);
 
       // حُفظ المنتج الجديد بباركودين
       final all = await db.allProducts();
       final saved = all.firstWhere((p) => p.name == 'قلم معدني');
-      // ignore: avoid_print
-      print('ALL CODES: ${await db.barcodesOfAll([saved.id, id])}');
       expect(saved.barcode, 'Q1');
       expect(await db.barcodesOf(saved.id), ['Q1', 'Q2']);
+      // المسح بالباركود الإضافي يجب أن يعطي المنتج الجديد لا غيره
       expect((await db.findByBarcode('Q2'))!.id, saved.id);
       expect(id > 0, true);
     });
