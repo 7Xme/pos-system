@@ -215,6 +215,8 @@ class AppDatabase extends _$AppDatabase {
         clean.add(b);
       }
       final id = await into(products).insert(entry);
+      // ignore: avoid_print
+      print('INSERT WITH clean=$clean id=$id');
       for (var i = 0; i < clean.length; i++) {
         await into(productBarcodes).insert(
           ProductBarcodesCompanion.insert(

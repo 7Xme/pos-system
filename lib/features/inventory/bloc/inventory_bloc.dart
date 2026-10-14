@@ -422,6 +422,8 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
         }
       }
       final d = e.draft;
+      // ignore: avoid_print
+      print('SAVE DRAFT barcodes=${d.barcodes} primary=${d.barcode} all=${d.allBarcodes}');
       if (d.id == null) {
         await db.insertProductWithBarcodes(
           ProductsCompanion.insert(
