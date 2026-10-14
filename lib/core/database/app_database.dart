@@ -77,18 +77,13 @@ class AppDatabase extends _$AppDatabase {
           .get();
     }
     final q = '%${query.trim()}%';
-    final alt = customSelect(
-      'SELECT product_id AS pid FROM product_barcodes WHERE barcode LIKE ?',
-      variables: [Variable<String>(q)],
-      readsFrom: {productBarcodes},
-    );
+    final alt = select(productBarcodes)
+      ..where((b) => b.barcode.like(q));
     return (select(products)
           ..where(
             (t) =>
                 t.isActive.equals(true) &
-                (t.name.like(q) |
-                    t.barcode.like(q) |
-                    existsQuery(alt)),
+                (t.name.like(q) | t.barcode.like(q) | existsQuery(alt)),
           )
           ..limit(50))
         .get();
@@ -131,22 +126,28 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final c = code.trim();
     if (c.isEmpty) return null;
-    final row = await customSelect(
-      'SELECT p.id AS pid, p.name AS pname FROM products p '
-      'WHERE p.barcode = \$code AND (\$except < 0 OR p.id <> \$except) '
-      'UNION ALL '
-      'SELECT p.id AS pid, p.name AS pname FROM product_barcodes b '
-      'JOIN products p ON p.id = b.product_id '
-      'WHERE b.barcode = \$code AND (\$except < 0 OR p.id <> \$except) '
-      'LIMIT 1',
-      variables: [
-        Variable<String>('code', c),
-        Variable<int>('except', exceptProductId ?? -1),
-      ],
-      readsFrom: {products, productBarcodes},
-    ).get();
-    if (row.isEmpty) return null;
-    return (id: row.first.read<int>('pid'), name: row.first.read<String>('pname'));
+    // 1) الباركود الرئيسي
+    final direct = await (select(products)
+          ..where((p) => p.barcode.equals(c))
+          ..limit(1))
+        .getSingleOrNull();
+    if (direct != null && direct.id != exceptProductId) {
+      return (id: direct.id, name: direct.name);
+    }
+    // 2) باركود إضافي (مع اسم صاحب المنتج)
+    final row = await (select(productBarcodes).join([
+          innerJoin(
+            products,
+            products.id.equalsExp(productBarcodes.productId),
+          ),
+        ])
+          ..where(productBarcodes.barcode.equals(c))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null) return null;
+    final pid = row.readTable(products).id;
+    if (pid == exceptProductId) return null;
+    return (id: pid, name: row.readTable(products).name);
   }
 
   /// حفظ باركودات المنتج: الأول رئيسي (ينعكس على products.barcode).
@@ -230,11 +231,8 @@ class AppDatabase extends _$AppDatabase {
   /// منتج بالباركود الرئيسي أو أي باركود إضافي.
   Future<Product?> findByBarcode(String barcode) {
     final code = barcode.trim();
-    final alt = customSelect(
-      'SELECT product_id AS pid FROM product_barcodes WHERE barcode = ?',
-      variables: [Variable<String>(code)],
-      readsFrom: {productBarcodes},
-    );
+    final alt = select(productBarcodes)
+      ..where((b) => b.barcode.equals(code));
     return (select(products)
           ..where(
             (t) =>

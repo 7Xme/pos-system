@@ -64,7 +64,8 @@ void main() {
 
       expect(find.text('منتج جديد', skipOffstage: false), findsWidgets);
       expect(find.text('اسم المنتج *'), findsOneWidget);
-      expect(find.text('الباركود *'), findsOneWidget);
+      expect(find.text('الباركود * (رئيسي)'), findsOneWidget);
+      expect(find.text('إضافة باركود آخر'), findsOneWidget);
       expect(find.text('إضافة المنتج'), findsOneWidget);
     });
 

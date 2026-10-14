@@ -282,7 +282,8 @@ class _ProductTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              'باركود: ${product.barcode}',
+              'باركود: ${product.barcode}'
+              '${product.extraBarcodesCount > 0 ? '  (+${product.extraBarcodesCount} إضافي)' : ''}',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

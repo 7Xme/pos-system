@@ -62,13 +62,14 @@ class _QuickAddProductDialogState extends State<_QuickAddProductDialog> {
 
     setState(() => _saving = true);
     try {
-      await widget.db.insertProduct(
+      await widget.db.insertProductWithBarcodes(
         ProductsCompanion.insert(
           name: name,
           barcode: widget.barcode,
           price: price,
           stockQty: Value(qty),
         ),
+        [widget.barcode],
       );
       if (mounted) Navigator.pop(context, name);
     } catch (_) {

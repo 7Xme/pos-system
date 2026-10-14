@@ -487,7 +487,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ? products
               : products
                   .where((p) =>
-                      p.name.contains(q) || p.barcode.contains(q))
+                      p.name.contains(q) ||
+                      p.barcode.contains(q) ||
+                      p.barcodes.any((b) => b.contains(q)))
                   .toList();
           return AlertDialog(
             title: const Text('إضافة منتج للقائمة'),
@@ -590,6 +592,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final cats = {
       for (final c in await bloc.db.allCategories()) c.id: c.name
     };
+    final codes = await bloc.db.barcodesOfAll([for (final p in products) p.id]);
     return [
       for (final p in products)
         InventoryProduct(
@@ -606,6 +609,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               p.categoryId == null ? null : cats[p.categoryId],
           isActive: p.isActive,
           isFavorite: p.isFavorite,
+          barcodes: codes[p.id] ??
+              [if (p.barcode.trim().isNotEmpty) p.barcode],
         ),
     ];
   }

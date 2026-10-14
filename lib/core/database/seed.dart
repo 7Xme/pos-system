@@ -22,7 +22,7 @@ Future<void> ensureSeeded(AppDatabase db) async {
   ];
 
   for (final (catId, name, barcode, price, stock, fav) in data) {
-    await db.insertProduct(
+    await db.insertProductWithBarcodes(
       ProductsCompanion.insert(
         name: name,
         barcode: barcode,
@@ -32,6 +32,7 @@ Future<void> ensureSeeded(AppDatabase db) async {
         categoryId: Value(catId),
         isFavorite: Value(fav),
       ),
+      [barcode],
     );
   }
 }
