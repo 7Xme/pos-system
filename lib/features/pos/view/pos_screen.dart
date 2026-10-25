@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/barcode/barcode_scanner_service.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
 import '../../../core/tts/arabic_tts_service.dart';
@@ -163,8 +163,9 @@ class _PosScreenState extends State<PosScreen> {
             List<int>? logoBytes;
             final logoPath = settings.logoPath;
             try {
-              if (logoPath != null && File(logoPath).existsSync()) {
-                logoBytes = await File(logoPath).readAsBytes();
+              final logoFile = ProductImageStore.fileFor(logoPath);
+              if (logoFile != null) {
+                logoBytes = await logoFile.readAsBytes();
               }
             } catch (_) {
               logoBytes = null;
@@ -503,12 +504,17 @@ class _ProductThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (path != null && File(path!).existsSync()) {
+    final file = ProductImageStore.fileFor(path);
+    if (file != null) {
+      // فكّ الصورة بحجم المصغّرة (64px) بدل دقتها الكاملة.
+      final cacheWidth =
+          (64 * MediaQuery.devicePixelRatioOf(context)).round();
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
         child: Image.file(
-          File(path!),
+          file,
           fit: BoxFit.cover,
+          cacheWidth: cacheWidth,
           errorBuilder: (_, __, ___) => _placeholder(),
         ),
       );

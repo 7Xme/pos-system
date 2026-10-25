@@ -2,9 +2,8 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../storage/app_paths.dart';
 import 'tables.dart';
 
 part 'app_database.g.dart';
@@ -32,11 +31,14 @@ class AppDatabase extends _$AppDatabase {
       : super(DatabaseConnection(NativeDatabase.memory()));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          await _createIndexes();
+        },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(products, products.isFavorite);
@@ -62,8 +64,41 @@ class AppDatabase extends _$AppDatabase {
               "WHERE barcode IS NOT NULL AND TRIM(barcode) <> ''",
             );
           }
+          if (from < 6) {
+            await _createIndexes();
+          }
         },
       );
+
+  /// فهارس ضرورية للأداء مع كتالوجات كبيرة (عشرات الآلاف).
+  /// `IF NOT EXISTS` لأن بعض قواعد الكتالوج المرفقة تحتويها مسبقاً.
+  Future<void> _createIndexes() async {
+    const statements = [
+      'CREATE INDEX IF NOT EXISTS idx_products_name '
+          'ON products (name)',
+      'CREATE INDEX IF NOT EXISTS idx_products_category '
+          'ON products (category_id)',
+      'CREATE INDEX IF NOT EXISTS idx_product_barcodes_product '
+          'ON product_barcodes (product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice '
+          'ON invoice_items (invoice_id)',
+      'CREATE INDEX IF NOT EXISTS idx_invoice_items_product '
+          'ON invoice_items (product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_created '
+          'ON invoices (created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_purchase_items_po '
+          'ON purchase_order_items (po_id)',
+      'CREATE INDEX IF NOT EXISTS idx_purchase_items_product '
+          'ON purchase_order_items (product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_return_items_return '
+          'ON return_items (return_id)',
+      'CREATE INDEX IF NOT EXISTS idx_returns_invoice '
+          'ON returns (invoice_id)',
+    ];
+    for (final sql in statements) {
+      await customStatement(sql);
+    }
+  }
 
   // ── استعلامات سريعة للـ POS ─────────────────────────────
 
@@ -92,6 +127,69 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// صفحة من المنتجات مع فلاتر شاشة المخزون (بحث/فئة/مخزون منخفض).
+  ///
+  /// الفلاتر تُنفَّذ داخل SQLite، فلا تُحمَّل عشرات الآلاف من الصفوف في
+  /// الذاكرة — تُجلب صفحة واحدة فقط (افتراضياً 100) مع العدد الكلي.
+  Future<({List<Product> items, int total})> searchInventoryPage({
+    String query = '',
+    int? categoryId,
+    bool lowStockOnly = false,
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    final q = query.trim();
+
+    // دالة تبني شرط WHERE، وتُنشئ استعلاماً فرعياً جديداً في كل نداء
+    // (لا يُعاد استعمال نفس كائن الاستعلام بين استعلامَي العدد والصفوف).
+    Expression<bool> buildWhere() {
+      Expression<bool>? pred;
+      void add(Expression<bool> e) => pred = pred == null ? e : pred! & e;
+      if (lowStockOnly) {
+        add(products.stockQty.isSmallerOrEqual(products.minStock));
+      }
+      if (categoryId != null) {
+        add(products.categoryId.equals(categoryId));
+      }
+      if (q.isNotEmpty) {
+        final pattern = '%$q%';
+        final alt = select(productBarcodes)
+          ..where(
+            (b) =>
+                b.barcode.like(pattern) & b.productId.equalsExp(products.id),
+          );
+        add(
+          products.name.like(pattern) |
+              products.barcode.like(pattern) |
+              existsQuery(alt),
+        );
+      }
+      return pred ?? const Constant(true);
+    }
+
+    final countExp = products.id.count();
+    final totalRow = await (selectOnly(products)
+          ..addColumns([countExp])
+          ..where(buildWhere()))
+        .getSingle();
+    final rows = await (select(products)
+          ..where((_) => buildWhere())
+          ..orderBy([(t) => OrderingTerm.asc(t.name)])
+          ..limit(limit, offset: offset))
+        .get();
+    return (items: rows, total: totalRow.read(countExp) ?? 0);
+  }
+
+  /// عدد المنتجات منخفضة المخزون (استعلام عدّ فقط — بلا تحميل صفوف).
+  Future<int> lowStockProductCount() async {
+    final countExp = products.id.count();
+    final row = await (selectOnly(products)
+          ..addColumns([countExp])
+          ..where(products.stockQty.isSmallerOrEqual(products.minStock)))
+        .getSingle();
+    return row.read(countExp) ?? 0;
+  }
+
   /// كل باركودات منتج بالترتيب (الرئيسي أولاً). يحوي دائماً الباركود الرئيسي.
   Future<List<String>> barcodesOf(int productId) async {
     final rows = await (select(productBarcodes)
@@ -110,14 +208,22 @@ class AppDatabase extends _$AppDatabase {
   Future<Map<int, List<String>>> barcodesOfAll(Iterable<int> ids) async {
     final list = ids.toList();
     if (list.isEmpty) return {};
-    final rows = await (select(productBarcodes)
-          ..where((t) => t.productId.isIn(list))
-          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder),
-            (t) => OrderingTerm.asc(t.id)]))
-        .get();
+    // SQLite يحدّ عدد متغيّرات الاستعلام الواحد، وكتالوج بعشرات الآلاف من
+    // المنتجات يتجاوز الحدّ في استعلام واحد — لذا نُقسّم إلى دفعات.
+    const chunk = 900;
     final map = <int, List<String>>{};
-    for (final r in rows) {
-      (map[r.productId] ??= []).add(r.barcode);
+    for (var i = 0; i < list.length; i += chunk) {
+      final end = i + chunk < list.length ? i + chunk : list.length;
+      final rows = await (select(productBarcodes)
+            ..where((t) => t.productId.isIn(list.sublist(i, end)))
+            ..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+          .get();
+      for (final r in rows) {
+        (map[r.productId] ??= []).add(r.barcode);
+      }
     }
     return map;
   }
@@ -800,6 +906,24 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// عدد المنتجات — استعلام خفيف بلا تحميل أي صفّ.
+  Future<int> productCount() async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS c FROM products',
+      readsFrom: {products},
+    ).getSingle();
+    return row.read<int>('c');
+  }
+
+  /// هل توجد أي منتجات؟ (أرخص بكثير من [allProducts] مع كتالوج كبير)
+  Future<bool> hasAnyProduct() async {
+    final row = await customSelect(
+      'SELECT 1 AS x FROM products LIMIT 1',
+      readsFrom: {products},
+    ).getSingleOrNull();
+    return row != null;
+  }
+
   Future<Product?> getProduct(int id) {
     return (select(products)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
@@ -825,13 +949,42 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// كل معرّفات المنتجات التي لها سجل مبيعات أو مشتريات (لتعطيل زر الحذف).
-  Future<Set<int>> productIdsWithHistory() async {
-    final rows = await customSelect(
-      'SELECT product_id AS pid FROM invoice_items '
-      'UNION SELECT product_id AS pid FROM purchase_order_items',
-      readsFrom: {invoiceItems, purchaseOrderItems},
-    ).get();
-    return {for (final r in rows) r.read<int>('pid')};
+  ///
+  /// عند تمرير [ids] يُفحص منها فقط (صفحة عرض واحدة) بدل مسح كل السجلات.
+  Future<Set<int>> productIdsWithHistory({Iterable<int>? ids}) async {
+    if (ids == null) {
+      final rows = await customSelect(
+        'SELECT product_id AS pid FROM invoice_items '
+        'UNION SELECT product_id AS pid FROM purchase_order_items',
+        readsFrom: {invoiceItems, purchaseOrderItems},
+      ).get();
+      return {for (final r in rows) r.read<int>('pid')};
+    }
+
+    final list = ids.toList();
+    if (list.isEmpty) return {};
+    const chunk = 900;
+    final found = <int>{};
+    for (var i = 0; i < list.length; i += chunk) {
+      final end = i + chunk < list.length ? i + chunk : list.length;
+      final part = list.sublist(i, end);
+      final placeholders = List.filled(part.length, '?').join(',');
+      final rows = await customSelect(
+        'SELECT product_id AS pid FROM invoice_items '
+        'WHERE product_id IN ($placeholders) '
+        'UNION SELECT product_id AS pid FROM purchase_order_items '
+        'WHERE product_id IN ($placeholders)',
+        variables: [
+          for (final id in part) Variable<int>(id),
+          for (final id in part) Variable<int>(id),
+        ],
+        readsFrom: {invoiceItems, purchaseOrderItems},
+      ).get();
+      for (final r in rows) {
+        found.add(r.read<int>('pid'));
+      }
+    }
+    return found;
   }
 
   // ── المفضلة (أزرار الاختصار) + الإعدادات — v2 ────────────
@@ -978,12 +1131,14 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dir = await getApplicationSupportDirectory();
-    final file = File(p.join(dir.path, 'bookstore_pos.sqlite'));
+    final file = File(await AppPaths.databaseFilePath());
     return NativeDatabase.createInBackground(file);
   });
 }
 
-/// فتح ملف قاعدة محدد (التحقق من نسخة مُستورَدة).
+/// فتح ملف قاعدة محدد (التحقق من نسخة مُستورَدة أو استيراد كتالوج).
+///
+/// يعمل في عزلة خلفية مثل قاعدة التطبيق: قراءة كتالوج بعشرات الآلاف من
+/// الصفوف على خيط الواجهة تُجمّد التطبيق.
 DatabaseConnection _openFile(String path) =>
-    DatabaseConnection(NativeDatabase(File(path)));
+    DatabaseConnection(NativeDatabase.createInBackground(File(path)));

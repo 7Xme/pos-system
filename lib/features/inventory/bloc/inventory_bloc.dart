@@ -173,6 +173,12 @@ class InventoryLowStockToggled extends InventoryEvent {
   List<Object?> get props => [only];
 }
 
+/// تحميل الصفحة التالية من المنتجات (تمرير لأسفل في الشبكة).
+class InventoryLoadMore extends InventoryEvent {}
+
+/// عدّاد المخزون المنخفض فقط — استعلام خفيف لا يحمّل الكتالوج (شارة القائمة).
+class InventoryLowStockCountRequested extends InventoryEvent {}
+
 class InventoryProductSaved extends InventoryEvent {
   final ProductDraft draft;
   final File? newImage;
@@ -218,7 +224,7 @@ enum InventoryStatus { initial, loading, ready, saving, failure }
 
 class InventoryState extends Equatable {
   final InventoryStatus status;
-  final List<InventoryProduct> products; // بعد الفلاتر
+  final List<InventoryProduct> products; // الصفحات المحمّلة بعد الفلاتر
   final List<InventoryProduct> favoriteProducts; // كل المثبتة (للاختصارات)
   final List<InventoryCategory> categories;
   final int lowStockCount;
@@ -227,6 +233,15 @@ class InventoryState extends Equatable {
   final bool lowStockOnly;
   final String? error;
   final String? notice;
+
+  /// العدد الكلي المطابق للفلاتر في القاعدة (لبقية الصفحات).
+  final int totalCount;
+
+  /// هل توجد صفحات أخرى لم تُحمَّل بعد؟
+  final bool hasMore;
+
+  /// جارٍ تحميل الصفحة التالية.
+  final bool loadingMore;
 
   const InventoryState({
     this.status = InventoryStatus.initial,
@@ -239,6 +254,9 @@ class InventoryState extends Equatable {
     this.lowStockOnly = false,
     this.error,
     this.notice,
+    this.totalCount = 0,
+    this.hasMore = false,
+    this.loadingMore = false,
   });
 
   InventoryState copyWith({
@@ -252,6 +270,9 @@ class InventoryState extends Equatable {
     bool? lowStockOnly,
     String? error,
     String? notice,
+    int? totalCount,
+    bool? hasMore,
+    bool? loadingMore,
   }) {
     return InventoryState(
       status: status ?? this.status,
@@ -265,6 +286,9 @@ class InventoryState extends Equatable {
       lowStockOnly: lowStockOnly ?? this.lowStockOnly,
       error: error,
       notice: notice,
+      totalCount: totalCount ?? this.totalCount,
+      hasMore: hasMore ?? this.hasMore,
+      loadingMore: loadingMore ?? this.loadingMore,
     );
   }
 
@@ -280,19 +304,27 @@ class InventoryState extends Equatable {
         lowStockOnly,
         error,
         notice,
+        totalCount,
+        hasMore,
+        loadingMore,
       ];
 }
 
 // ── Bloc ──────────────────────────────────────────────────
 class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
   final AppDatabase db;
-  List<InventoryProduct> _all = [];
+
+  /// حجم الصفحة الواحدة — شبكة المخزون تعرض 4 أعمدة، فالصفحة تكفي عدة
+  /// شاشات، وتُحمَّل التالية عند التمرير.
+  static const int _pageSize = 120;
 
   InventoryBloc({required this.db}) : super(const InventoryState()) {
     on<InventoryStarted>(_onStarted);
     on<InventoryQueryChanged>(_onFilter);
     on<InventoryCategorySelected>(_onFilter);
     on<InventoryLowStockToggled>(_onFilter);
+    on<InventoryLoadMore>(_onLoadMore);
+    on<InventoryLowStockCountRequested>(_onLowStockCountRequested);
     on<InventoryProductSaved>(_onProductSaved);
     on<InventoryProductDeleted>(_onProductDeleted);
     on<InventoryFavoriteToggled>(_onFavoriteToggled);
@@ -307,103 +339,198 @@ class InventoryBloc extends Bloc<InventoryEvent, InventoryState> {
     InventoryStarted e,
     Emitter<InventoryState> emit,
   ) async {
-    emit(state.copyWith(status: InventoryStatus.loading));
+    if (state.status == InventoryStatus.initial) {
+      emit(state.copyWith(status: InventoryStatus.loading));
+    }
     await _reload(emit);
   }
 
+  /// يحمّل الصفحة الأولى + بيانات الشاشة المساعدة (فئات، مثبتة، عدّادات).
   Future<void> _reload(Emitter<InventoryState> emit) async {
-    final products = await db.allProducts();
     final categories = await db.allCategories();
     final counts = await db.productCountByCategory();
-    final history = await db.productIdsWithHistory();
-    final barcodeMap = await db.barcodesOfAll([for (final p in products) p.id]);
     final catNames = {for (final c in categories) c.id: c.name};
-    _all = products
-        .map(
-          (p) => InventoryProduct(
-            id: p.id,
-            name: p.name,
-            barcode: p.barcode,
-            price: p.price,
-            cost: p.cost,
-            stockQty: p.stockQty,
-            minStock: p.minStock,
-            imagePath: p.imagePath,
-            categoryId: p.categoryId,
-            categoryName:
-                p.categoryId == null ? null : catNames[p.categoryId],
-            isActive: p.isActive,
-            isFavorite: p.isFavorite,
-            hasHistory: history.contains(p.id),
-            barcodes: barcodeMap[p.id] ??
-                [if (p.barcode.trim().isNotEmpty) p.barcode],
-          ),
-        )
-        .toList();
+
+    final page = await _fetchPage(
+      query: state.query,
+      categoryId: state.categoryFilterId,
+      lowStockOnly: state.lowStockOnly,
+      catNames: catNames,
+    );
+
+    final favRows = await db.favoriteProducts();
+    final favIds = [for (final p in favRows) p.id];
+    final favBarcodes = await db.barcodesOfAll(favIds);
+    final favHistory = await db.productIdsWithHistory(ids: favIds);
+
+    final lowCount = await db.lowStockProductCount();
+
+    final favorites = [
+      for (final p in favRows)
+        _toInventoryProduct(
+          p,
+          barcodes: favBarcodes[p.id],
+          hasHistory: favHistory.contains(p.id),
+          categoryName: catNames[p.categoryId],
+        ),
+    ];
+
     emit(
       state.copyWith(
         status: InventoryStatus.ready,
-        products: _applyFilters(),
-        favoriteProducts: _all.where((p) => p.isFavorite).toList(),
-        categories: categories
-            .map(
-              (c) => InventoryCategory(
-                id: c.id,
-                name: c.name,
-                productCount: counts[c.id] ?? 0,
-              ),
-            )
-            .toList(),
-        lowStockCount: _all.where((p) => p.isLowStock).length,
+        products: page.items,
+        favoriteProducts: favorites,
+        categories: [
+          for (final c in categories)
+            InventoryCategory(
+              id: c.id,
+              name: c.name,
+              productCount: counts[c.id] ?? 0,
+            ),
+        ],
+        lowStockCount: lowCount,
+        totalCount: page.total,
+        hasMore: page.items.length < page.total,
+        loadingMore: false,
         error: null,
         notice: null,
       ),
     );
   }
 
-  List<InventoryProduct> _applyFilters() => _filtered();
+  /// يجلب صفحة منتجات (وباركوداتها/سجلها) فقط — بلا الفئات أو العدّادات.
+  /// تُستعمل عند تغيير البحث/الفلتر وعند التمرير، حيث لا تتغيّر بيانات الشاشة.
+  Future<({List<InventoryProduct> items, int total})> _fetchPage({
+    required String query,
+    required int? categoryId,
+    required bool lowStockOnly,
+    required Map<int, String> catNames,
+    int offset = 0,
+  }) async {
+    final page = await db.searchInventoryPage(
+      query: query,
+      categoryId: categoryId,
+      lowStockOnly: lowStockOnly,
+      limit: _pageSize,
+      offset: offset,
+    );
+    final ids = [for (final p in page.items) p.id];
+    final barcodes = await db.barcodesOfAll(ids);
+    final history = await db.productIdsWithHistory(ids: ids);
+    return (
+      items: [
+        for (final p in page.items)
+          _toInventoryProduct(
+            p,
+            barcodes: barcodes[p.id],
+            hasHistory: history.contains(p.id),
+            categoryName: catNames[p.categoryId],
+          ),
+      ],
+      total: page.total,
+    );
+  }
 
+  InventoryProduct _toInventoryProduct(
+    Product p, {
+    List<String>? barcodes,
+    bool hasHistory = false,
+    String? categoryName,
+  }) {
+    return InventoryProduct(
+      id: p.id,
+      name: p.name,
+      barcode: p.barcode,
+      price: p.price,
+      cost: p.cost,
+      stockQty: p.stockQty,
+      minStock: p.minStock,
+      imagePath: p.imagePath,
+      categoryId: p.categoryId,
+      categoryName: categoryName,
+      isActive: p.isActive,
+      isFavorite: p.isFavorite,
+      hasHistory: hasHistory,
+      barcodes: barcodes ??
+          [if (p.barcode.trim().isNotEmpty) p.barcode],
+    );
+  }
+
+  /// تحميل صفحة إضافية عند التمرير لأسفل.
+  Future<void> _onLoadMore(
+    InventoryLoadMore e,
+    Emitter<InventoryState> emit,
+  ) async {
+    if (state.loadingMore || !state.hasMore) return;
+    final query = state.query;
+    final categoryId = state.categoryFilterId;
+    final lowStockOnly = state.lowStockOnly;
+    emit(state.copyWith(loadingMore: true));
+
+    final page = await _fetchPage(
+      query: query,
+      categoryId: categoryId,
+      lowStockOnly: lowStockOnly,
+      catNames: {for (final c in state.categories) c.id: c.name},
+      offset: state.products.length,
+    );
+    // تغيّر الفلتر أثناء الجلب: تجاهل الصفحة القديمة.
+    if (state.query != query ||
+        state.categoryFilterId != categoryId ||
+        state.lowStockOnly != lowStockOnly) {
+      emit(state.copyWith(loadingMore: false));
+      return;
+    }
+    final merged = [...state.products, ...page.items];
+    emit(state.copyWith(
+      products: merged,
+      totalCount: page.total,
+      hasMore: merged.length < page.total,
+      loadingMore: false,
+    ));
+  }
+
+  Future<void> _onLowStockCountRequested(
+    InventoryLowStockCountRequested e,
+    Emitter<InventoryState> emit,
+  ) async {
+    emit(state.copyWith(lowStockCount: await db.lowStockProductCount()));
+  }
+
+  /// تغيير البحث/الفلتر: يجلب الصفحة الأولى فقط — الفئات والعدّادات والمثبتة
+  /// لا تتغيّر بتغيّر الفلتر، فلا داعي لإعادة قراءتها مع كل ضغطة مفتاح.
   Future<void> _onFilter(
     InventoryEvent e,
     Emitter<InventoryState> emit,
   ) async {
     if (e is InventoryQueryChanged) {
-      emit(state.copyWith(
-        query: e.query,
-        products: _filtered(query: e.query),
-      ));
+      emit(state.copyWith(query: e.query));
     } else if (e is InventoryCategorySelected) {
-      emit(state.copyWith(
-        categoryFilterId: () => e.categoryId,
-        products: _filtered(cat: () => e.categoryId),
-      ));
+      emit(state.copyWith(categoryFilterId: () => e.categoryId));
     } else if (e is InventoryLowStockToggled) {
-      emit(state.copyWith(
-        lowStockOnly: e.only,
-        products: _filtered(lowOnly: e.only),
-      ));
+      emit(state.copyWith(lowStockOnly: e.only));
     }
-  }
-
-  List<InventoryProduct> _filtered({
-    String? query,
-    int? Function()? cat,
-    bool? lowOnly,
-  }) {
-    final q = (query ?? state.query).trim();
-    final catId = cat != null ? cat() : state.categoryFilterId;
-    final low = lowOnly ?? state.lowStockOnly;
-    return _all.where((p) {
-      if (low && !p.isLowStock) return false;
-      if (catId != null && p.categoryId != catId) return false;
-      if (q.isNotEmpty &&
-          !p.name.contains(q) &&
-          !p.barcode.contains(q) &&
-          !p.barcodes.any((b) => b.contains(q))) {
-        return false;
-      }
-      return true;
-    }).toList();
+    final query = state.query;
+    final categoryId = state.categoryFilterId;
+    final lowStockOnly = state.lowStockOnly;
+    final page = await _fetchPage(
+      query: query,
+      categoryId: categoryId,
+      lowStockOnly: lowStockOnly,
+      catNames: {for (final c in state.categories) c.id: c.name},
+    );
+    // تغيّر الفلتر أثناء الجلب: النتيجة القديمة لا تصلح للعرض.
+    if (state.query != query ||
+        state.categoryFilterId != categoryId ||
+        state.lowStockOnly != lowStockOnly) {
+      return;
+    }
+    emit(state.copyWith(
+      products: page.items,
+      totalCount: page.total,
+      hasMore: page.items.length < page.total,
+      loadingMore: false,
+    ));
   }
 
   Future<void> _onProductSaved(

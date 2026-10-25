@@ -2,10 +2,13 @@ import 'package:drift/drift.dart';
 
 import 'app_database.dart';
 
-/// بيانات أولية عند أول تشغيل ( فارغ تماماً )
+/// بيانات تجريبية صغيرة — **للاختبارات فقط**.
+///
+/// لم يعد التطبيق يستدعيها عند الإقلاع: الكتالوج الافتراضي يأتي من الملف
+/// المرفق عبر [CatalogBootstrap] (انظر `lib/core/database/catalog_bootstrap.dart`).
 Future<void> ensureSeeded(AppDatabase db) async {
-  final existing = await db.allProducts();
-  if (existing.isNotEmpty) return;
+  final has = await db.hasAnyProduct();
+  if (has) return;
 
   final stationery = await db.insertCategory('قرطاسية');
   final bags = await db.insertCategory('حقائب مدرسية');

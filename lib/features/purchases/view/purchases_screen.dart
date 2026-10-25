@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/database/app_database.dart';
+import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_purchase.dart';
 import '../bloc/purchases_bloc.dart';
@@ -65,9 +66,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final s = context.read<SettingsCubit>().state;
     List<int>? logoBytes;
     try {
-      final p = s.logoPath;
-      if (p != null && File(p).existsSync()) {
-        logoBytes = await File(p).readAsBytes();
+      final logoFile = ProductImageStore.fileFor(s.logoPath);
+      if (logoFile != null) {
+        logoBytes = await logoFile.readAsBytes();
       }
     } catch (_) {
       logoBytes = null;
@@ -470,149 +471,164 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  /// حوار إضافة منتج للقائمة: بحث + كمية + سعر شراء
+  /// حوار إضافة منتج للقائمة: بحث مباشر في القاعدة (صفحة واحدة)،
+  /// بدل تحميل عشرات الآلاف من المنتجات في الذاكرة عند كل فتح.
   Future<void> _pickProductDialog() async {
     final bloc = context.read<PurchasesBloc>();
-    // القائمة الكاملة من القاعدة (لا تعتمد على فلاتر شاشة المخزون)
-    final products = await _allProductsFallback();
-    if (!mounted) return;
-    var query = '';
-    var qty = 1;
-    await showDialog(
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          final q = query.trim();
-          final list = q.isEmpty
-              ? products
-              : products
-                  .where((p) =>
-                      p.name.contains(q) ||
-                      p.barcode.contains(q) ||
-                      p.barcodes.any((b) => b.contains(q)))
-                  .toList();
-          return AlertDialog(
-            title: const Text('إضافة منتج للقائمة'),
-            content: SizedBox(
-              width: 480,
-              height: 420,
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: 56,
-                    child: TextField(
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: 'ابحث بالاسم أو الباركود...',
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: (v) => setState(() => query = v),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: list.isEmpty
-                        ? const Center(
-                            child: Text('لا توجد نتائج'),
-                          )
-                        : ListView.separated(
-                            itemCount: list.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final p = list[i];
-                              return ListTile(
-                                title: Text(p.name),
-                                subtitle: Text(
-                                  'باركود: ${p.barcode} — مخزون: ${p.stockQty}',
-                                ),
-                                trailing: SizedBox(
-                                  width: 150,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton.outlined(
-                                        onPressed: qty > 1
-                                            ? () => setState(() => qty--)
-                                            : null,
-                                        icon:
-                                            const Icon(Icons.remove),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                        ),
-                                        child: Text(
-                                          '$qty',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      IconButton.outlined(
-                                        onPressed: () =>
-                                            setState(() => qty++),
-                                        icon: const Icon(Icons.add),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                onTap: () {
-                                  bloc.add(PurchasesAddProduct(
-                                    productId: p.id,
-                                    qty: qty,
-                                    unitCost: p.cost,
-                                  ));
-                                  Navigator.pop(ctx);
-                                },
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('إغلاق'),
-              ),
-            ],
-          );
-        },
+      builder: (_) => _ProductPickerDialog(
+        db: bloc.db,
+        onPick: (p, qty) => bloc.add(PurchasesAddProduct(
+          productId: p.id,
+          qty: qty,
+          unitCost: p.cost,
+        )),
       ),
     );
   }
+}
 
-  /// كل المنتجات من القاعدة مباشرة لاختيار المشتريات.
-  Future<List<InventoryProduct>> _allProductsFallback() async {
-    final bloc = context.read<PurchasesBloc>();
-    final products = await bloc.db.allProducts();
-    final cats = {
-      for (final c in await bloc.db.allCategories()) c.id: c.name
-    };
-    final codes = await bloc.db.barcodesOfAll([for (final p in products) p.id]);
-    return [
-      for (final p in products)
-        InventoryProduct(
-          id: p.id,
-          name: p.name,
-          barcode: p.barcode,
-          price: p.price,
-          cost: p.cost,
-          stockQty: p.stockQty,
-          minStock: p.minStock,
-          imagePath: p.imagePath,
-          categoryId: p.categoryId,
-          categoryName:
-              p.categoryId == null ? null : cats[p.categoryId],
-          isActive: p.isActive,
-          isFavorite: p.isFavorite,
-          barcodes: codes[p.id] ??
-              [if (p.barcode.trim().isNotEmpty) p.barcode],
+/// منتقي منتجات للمشتريات — استعلام صفحة واحدة مع بحث SQL.
+class _ProductPickerDialog extends StatefulWidget {
+  const _ProductPickerDialog({required this.db, required this.onPick});
+
+  final AppDatabase db;
+  final void Function(Product product, int qty) onPick;
+
+  @override
+  State<_ProductPickerDialog> createState() => _ProductPickerDialogState();
+}
+
+class _ProductPickerDialogState extends State<_ProductPickerDialog> {
+  static const int _pageSize = 60;
+
+  final _searchCtrl = TextEditingController();
+  Timer? _debounce;
+  List<Product> _items = const [];
+  bool _loading = true;
+  int _qty = 1;
+  int _request = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _search('');
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String v) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 200), () => _search(v));
+  }
+
+  Future<void> _search(String query) async {
+    final req = ++_request;
+    setState(() => _loading = true);
+    final page = await widget.db.searchInventoryPage(
+      query: query,
+      limit: _pageSize,
+    );
+    if (!mounted || req != _request) return;
+    setState(() {
+      _items = page.items;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('إضافة منتج للقائمة'),
+      content: SizedBox(
+        width: 480,
+        height: 420,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 56,
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                onChanged: _onChanged,
+                decoration: const InputDecoration(
+                  hintText: 'ابحث بالاسم أو الباركود...',
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _items.isEmpty
+                      ? const Center(child: Text('لا توجد نتائج'))
+                      : ListView.separated(
+                          itemCount: _items.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final p = _items[i];
+                            return ListTile(
+                              title: Text(p.name),
+                              subtitle: Text(
+                                'باركود: ${p.barcode} — مخزون: ${p.stockQty}',
+                              ),
+                              trailing: SizedBox(
+                                width: 150,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton.outlined(
+                                      onPressed: _qty > 1
+                                          ? () => setState(() => _qty--)
+                                          : null,
+                                      icon: const Icon(Icons.remove),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      child: Text(
+                                        '$_qty',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton.outlined(
+                                      onPressed: () =>
+                                          setState(() => _qty++),
+                                      icon: const Icon(Icons.add),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              onTap: () {
+                                widget.onPick(p, _qty);
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
-    ];
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إغلاق'),
+        ),
+      ],
+    );
   }
 }
 

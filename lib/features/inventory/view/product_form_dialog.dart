@@ -382,10 +382,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     File? file;
     if (_newImage != null && !_removeImage) {
       file = _newImage;
-    } else if (!_removeImage &&
-        existingImage != null &&
-        File(existingImage).existsSync()) {
-      file = File(existingImage);
+    } else if (!_removeImage) {
+      file = ProductImageStore.fileFor(existingImage);
     }
     if (file != null) {
       return ClipRRect(

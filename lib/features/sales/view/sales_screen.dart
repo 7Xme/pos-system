@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
 import '../../../core/printing/pdf_closing.dart';
@@ -54,9 +54,9 @@ class _SalesScreenState extends State<SalesScreen> {
     final s = context.read<SettingsCubit>().state;
     List<int>? logoBytes;
     try {
-      final p = s.logoPath;
-      if (p != null && File(p).existsSync()) {
-        logoBytes = await File(p).readAsBytes();
+      final logoFile = ProductImageStore.fileFor(s.logoPath);
+      if (logoFile != null) {
+        logoBytes = await logoFile.readAsBytes();
       }
     } catch (_) {
       logoBytes = null;

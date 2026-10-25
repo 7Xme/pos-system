@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/inventory_bloc.dart';
@@ -19,11 +19,13 @@ class ProductsScreen extends StatefulWidget {
 
 class _ProductsScreenState extends State<ProductsScreen> {
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
+    _scrollCtrl.addListener(_onScroll);
     if (context.read<InventoryBloc>().state.status ==
         InventoryStatus.initial) {
       context.read<InventoryBloc>().add(InventoryStarted());
@@ -33,8 +35,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _scrollCtrl.dispose();
     _debounce?.cancel();
     super.dispose();
+  }
+
+  /// تحميل الصفحة التالية قبل الوصول لنهاية الشبكة بهامش بسيط.
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    if (_scrollCtrl.position.extentAfter > 600) return;
+    final bloc = context.read<InventoryBloc>();
+    if (bloc.state.hasMore && !bloc.state.loadingMore) {
+      bloc.add(InventoryLoadMore());
+    }
   }
 
   void _onSearch(String v) {
@@ -91,7 +104,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
       builder: (context, state) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('المنتجات والمخزون'),
+            title: Text(
+              state.totalCount > 0
+                  ? 'المنتجات والمخزون (${state.totalCount})'
+                  : 'المنتجات والمخزون',
+            ),
             actions: [
               if (state.lowStockCount > 0)
                 Padding(
@@ -189,6 +206,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       : state.products.isEmpty
                           ? _emptyState(context, state)
                           : GridView.builder(
+                              controller: _scrollCtrl,
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 4,
@@ -196,18 +214,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
                               ),
-                              itemCount: state.products.length,
-                              itemBuilder: (ctx, i) => _ProductTile(
-                                product: state.products[i],
-                                onEdit: () => showProductFormDialog(
-                                  context,
-                                  state.products[i],
-                                ),
-                                onDelete: () => _confirmDelete(
-                                  context,
-                                  state.products[i],
-                                ),
-                              ),
+                              itemCount: state.products.length +
+                                  (state.hasMore ? 1 : 0),
+                              itemBuilder: (ctx, i) {
+                                if (i >= state.products.length) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                final p = state.products[i];
+                                return _ProductTile(
+                                  product: p,
+                                  onEdit: () =>
+                                      showProductFormDialog(context, p),
+                                  onDelete: () => _confirmDelete(context, p),
+                                );
+                              },
                             ),
                 ),
               ],
@@ -269,7 +294,7 @@ class _ProductTile extends StatelessWidget {
             SizedBox(
               height: 72,
               width: 72,
-              child: _thumb(product.imagePath),
+              child: _thumb(context, product.imagePath),
             ),
             const SizedBox(height: 6),
             Text(
@@ -380,13 +405,26 @@ child: IconButton.outlined(
       ),
     );
   }
-  Widget _thumb(String? path) {
-    if (path != null && File(path).existsSync()) {
+  Widget _thumb(BuildContext context, String? path) {
+    final file = ProductImageStore.fileFor(path);
+    if (file != null) {
+      // فكّ الصورة بحجم العرض فقط (72px) بدل الدقة الكاملة — أسرع وأخف.
+      final cacheWidth =
+          (72 * MediaQuery.devicePixelRatioOf(context)).round();
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.file(File(path), fit: BoxFit.cover),
+        child: Image.file(
+          file,
+          fit: BoxFit.cover,
+          cacheWidth: cacheWidth,
+          errorBuilder: (_, __, ___) => _thumbPlaceholder(),
+        ),
       );
     }
+    return _thumbPlaceholder();
+  }
+
+  Widget _thumbPlaceholder() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[200],

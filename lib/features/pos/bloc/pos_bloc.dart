@@ -361,8 +361,11 @@ class PosBloc extends Bloc<PosEvent, PosState> {
 
   Future<void> _onStarted(PosStarted e, Emitter<PosState> emit) async {
     emit(state.copyWith(status: PosStatus.loading));
-    final items = await repo.search('');
-    final favs = await repo.favorites();
+    // ابدأ الاستعلامين معاً بدل انتظار الأول ثم الثاني.
+    final itemsFuture = repo.search('');
+    final favsFuture = repo.favorites();
+    final items = await itemsFuture;
+    final favs = await favsFuture;
     emit(state.copyWith(
       status: PosStatus.ready,
       catalog: items,

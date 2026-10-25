@@ -6,8 +6,9 @@ import 'package:window_manager/window_manager.dart';
 import 'app/shell.dart';
 import 'app/theme.dart';
 import 'core/database/app_database.dart';
+import 'core/database/catalog_bootstrap.dart';
 import 'core/database/drift_repositories.dart';
-import 'core/database/seed.dart';
+import 'core/storage/app_paths.dart';
 import 'core/tts/arabic_tts_service.dart';
 import 'features/inventory/bloc/inventory_bloc.dart';
 import 'features/pos/bloc/pos_bloc.dart';
@@ -35,13 +36,19 @@ Future<void> main() async {
     // يعمل التطبيق بنافذة افتراضية
   }
 
-  // قاعدة البيانات + بيانات أولية
-  final db = AppDatabase();
+  // كشف الوضع المحمول: إذا كانت القاعدة بجانب البرنامج (أو في data بجانبه)
+  // يعمل التطبيق عليها مباشرةً — قبل أي فتح لقاعدة البيانات.
+  await AppPaths.ensureInitialized();
+
+  // الكتالوج الافتراضي المرفق (أول تشغيل فقط، وليس في الوضع المحمول):
+  // ينسخ قاعدة الكتالوج المرفقة ويضبط مسارات الصور — قبل فتح Drift.
   try {
-    await ensureSeeded(db);
+    await CatalogBootstrap.seedIfEmpty();
   } catch (_) {
-    // يعمل التطبيق بقاعدة فارغة
+    // يعمل التطبيق بقاعدة فارغة إن تعذّر الزرع
   }
+
+  final db = AppDatabase();
 
   // تهيئة النطق العربي (كسولة وآمنة: لا تمنع الإقلاع عند الفشل)
   try {

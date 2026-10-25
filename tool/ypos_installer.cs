@@ -81,12 +81,14 @@ namespace YPOS.Installer
                 try { DeleteUninstallEntry(); } catch { }
                 try
                 {
-                    if (Directory.Exists(InstallDir)) Directory.Delete(InstallDir, true);
+                    // لا نحذف مجلد data: فيه قاعدة المتجر المحمولة والصور.
+                    DeleteProgramFilesKeepingData();
                 }
                 catch { }
-                // بيانات المتجر (المجلد %APPDATA%\YPOS\YPOS) تُترك كما هي.
                 MessageBox.Show(
-                    "تم إلغاء تثبيت YPOS.\nملفات بيانات المتجر محفوظة.",
+                    "تم إلغاء تثبيت YPOS.\n"
+                    + "ملفات بيانات المتجر محفوظة في المجلد:\n"
+                    + Path.Combine(InstallDir, "data"),
                     "YPOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -134,6 +136,58 @@ namespace YPOS.Installer
                     if (i == 0) throw new InvalidOperationException("الملف المرفق فارغ");
                 }
             }
+        }
+
+        /// يحذف ملفات البرنامج مع الإبقاء على مجلد data (بيانات المتجر).
+        internal static void DeleteProgramFilesKeepingData()
+        {
+            if (!Directory.Exists(InstallDir)) return;
+            foreach (string file in Directory.GetFiles(InstallDir))
+            {
+                try { File.Delete(file); } catch { }
+            }
+            foreach (string dir in Directory.GetDirectories(InstallDir))
+            {
+                if (string.Equals(Path.GetFileName(dir), "data",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                try { Directory.Delete(dir, true); } catch { }
+            }
+            try
+            {
+                if (Directory.GetFileSystemEntries(InstallDir).Length == 0)
+                    Directory.Delete(InstallDir);
+            }
+            catch { }
+        }
+
+        /// ينسخ مجلد الكتالوج الافتراضي (data) الموجود بجانب المثبّت إلى مجلد
+        /// التثبيت، فيجد التطبيق الكتالوج المرفق عند أول تشغيل. لا يفعل شيئًا
+        /// إن لم يكن المجلد موجودًا (نسخة بلا كتالوج مرفق).
+        /// **لا يستبدل أي ملف موجود** — خصوصاً bookstore_pos.sqlite الذي قد
+        /// يكون قاعدة المتجر الحية (نسخة محمولة) بعد الاستخدام.
+        internal static void CopyBundledData(Action<int, string> report)
+        {
+            string setupDir = Path.GetDirectoryName(Application.ExecutablePath);
+            string src = Path.Combine(setupDir, "data");
+            if (!Directory.Exists(src)) return;
+            string dst = Path.Combine(InstallDir, "data");
+            string[] files = Directory.GetFiles(src, "*", SearchOption.AllDirectories);
+            int n = 0;
+            foreach (string f in files)
+            {
+                string rel = f.Substring(src.Length).TrimStart(
+                    Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                string outPath = Path.Combine(dst, rel);
+                string dir = Path.GetDirectoryName(outPath);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                if (!File.Exists(outPath)) File.Copy(f, outPath, false);
+                n++;
+                if (report != null && (n % 500 == 0)) report(n, rel);
+            }
+            if (report != null) report(n, "data/");
         }
 
         /// ينقل بيانات المتجر القديمة إلى مسار YPOS الجديد (نسخ فقط، بلا حذف).
@@ -412,6 +466,12 @@ namespace YPOS.Installer
                     Program.ExtractPayload(delegate(int n, string name)
                     {
                         Log("  + " + name);
+                    });
+
+                    Log("نسخ الكتالوج الافتراضي (منتجات + صور)...");
+                    Program.CopyBundledData(delegate(int n, string name)
+                    {
+                        SetStatus("نسخ الكتالوج الافتراضي... " + n + " ملف");
                     });
 
                     Log("نقل بيانات المتجر إن وُجدت...");

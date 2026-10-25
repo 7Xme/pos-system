@@ -4,24 +4,31 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
+import '../storage/app_paths.dart';
 
 /// النسخ الاحتياطي والاستعادة:
 /// - التصدير: ملف ZIP واحد يحتوي ملف قاعدة البيانات + مجلد الصور.
 /// - الاستيراد: اختيار ملف ZIP فيفك التطبيق ضغطه ويستبدل البيانات.
+///
+/// يعمل على مجلد البيانات الفعلي: مجلد محمول بجانب الـ exe أو مسار AppData.
 class BackupService {
-  static const String dbFileName = 'bookstore_pos.sqlite';
-  static const String imagesDirName = 'product_images';
+  static const String dbFileName = AppPaths.dbFileName;
+  static const String imagesDirName = AppPaths.imagesFolderName;
 
-  static Future<Directory> supportDir() => getApplicationSupportDirectory();
+  static Future<Directory> supportDir() async {
+    await AppPaths.ensureInitialized();
+    return AppPaths.dataDir;
+  }
 
   static Future<File> dbFile() async =>
-      File(p.join((await supportDir()).path, dbFileName));
+      File(await AppPaths.databaseFilePath());
 
-  static Future<Directory> imagesDir() async =>
-      Directory(p.join((await supportDir()).path, imagesDirName));
+  static Future<Directory> imagesDir() async {
+    await AppPaths.ensureInitialized();
+    return AppPaths.imagesDir;
+  }
 
   // ── دوال خالصة (قابلة للاختبار) ──────────────────────────
 

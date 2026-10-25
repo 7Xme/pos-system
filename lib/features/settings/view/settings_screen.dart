@@ -238,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _clearLogoVisible() {
     if (_newLogo != null && !_removeLogo) return true;
     final current = context.read<SettingsCubit>().state.logoPath;
-    return !_removeLogo && current != null && File(current).existsSync();
+    return !_removeLogo && ProductImageStore.fileFor(current) != null;
   }
 
   Widget _logoPreview() {
@@ -247,9 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       file = _newLogo;
     } else if (!_removeLogo) {
       final current = context.read<SettingsCubit>().state.logoPath;
-      if (current != null && File(current).existsSync()) {
-        file = File(current);
-      }
+      file = ProductImageStore.fileFor(current);
     }
     if (file != null) {
       return ClipRRect(

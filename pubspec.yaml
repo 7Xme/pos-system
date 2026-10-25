@@ -18,7 +18,9 @@ dependencies:
 
   # Local DB - Drift (SQLite)
   drift: ">=2.20.0 <3.0.0"
-  sqlite3_flutter_libs: ">=0.5.0 <1.0.0"
+  # 0.6.0+eol is an empty shim requiring sqlite3 3.x; drift 2.x needs the
+  # real 0.5.x build so that sqlite3.dll is bundled with the Windows app.
+  sqlite3_flutter_libs: ">=0.5.0 <0.6.0"
   sqlite3: ">=2.0.0 <3.0.0"
   path_provider: ">=2.0.0 <3.0.0"
   path: ">=1.8.0 <2.0.0"
