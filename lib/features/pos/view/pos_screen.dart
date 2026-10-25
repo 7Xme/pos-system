@@ -10,6 +10,7 @@ import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
 import '../../../core/printing/pdf_builders.dart';
 import '../../../core/tts/arabic_tts_service.dart';
+import '../../../core/widgets/product_hover_preview.dart';
 import '../../inventory/bloc/inventory_bloc.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/pos_bloc.dart';
@@ -452,7 +453,10 @@ class _ProductCard extends StatelessWidget {
               SizedBox(
                 height: 64,
                 width: 64,
-                child: _ProductThumb(path: imagePath),
+                child: ProductHoverPreview(
+                  imagePath: imagePath,
+                  child: _ProductThumb(path: imagePath),
+                ),
               ),
               const SizedBox(height: 6),
               Text(

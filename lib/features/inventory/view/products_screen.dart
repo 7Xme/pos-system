@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/images/product_image_store.dart';
 import '../../../core/printing/a4_print_service.dart';
+import '../../../core/widgets/product_hover_preview.dart';
 import '../../settings/bloc/settings_cubit.dart';
 import '../bloc/inventory_bloc.dart';
 import 'product_form_dialog.dart';
@@ -294,7 +295,10 @@ class _ProductTile extends StatelessWidget {
             SizedBox(
               height: 72,
               width: 72,
-              child: _thumb(context, product.imagePath),
+              child: ProductHoverPreview(
+                imagePath: product.imagePath,
+                child: _thumb(context, product.imagePath),
+              ),
             ),
             const SizedBox(height: 6),
             Text(
